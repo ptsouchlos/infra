@@ -51,6 +51,45 @@ See `NOTICE.md` for upstream attribution.
 `tests/` generates throwaway projects that exercise each module on Linux, macOS and Windows.
 See [tests/README.md](tests/README.md).
 
+## Shared CI actions
+
+`.github/actions/` holds composite GitHub Actions for downstream repos. Reference them by tag:
+`ptsouchlos/infra/.github/actions/<name>@v1`.
+
+| Action | Inputs | Does |
+| --- | --- | --- |
+| `setup-cpp` | `compiler`, `version`, `cmake-version` | installs the compiler (and CMake/Ninja when missing or pinned), exports `CC`/`CXX`, sets up MSVC on Windows |
+| `cmake-build` | `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args`, `test`, `install-prefix`, `ccache`, `cpm-cache` | configure, build, ctest, optional install |
+| `setup-rust` | `toolchain`, `components`, `just` | rustup toolchain, cargo cache, optional `just` |
+| `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test` | `cargo fmt --check`, clippy, test |
+| `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
+
+```yaml
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, compiler: gcc, version: 14 }
+          - { os: ubuntu-latest, compiler: clang, version: 18 }
+          - { os: macos-latest, compiler: appleclang }
+          - { os: windows-latest, compiler: msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ptsouchlos/infra/.github/actions/setup-cpp@v1
+        with: { compiler: "${{ matrix.compiler }}", version: "${{ matrix.version }}" }
+      - uses: ptsouchlos/infra/.github/actions/cmake-build@v1
+        with: { ccache: "true", cpm-cache: "true" }
+```
+
+Notes:
+- Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc. Anything else fails fast.
+- `configure-args` is split on spaces, so one argument cannot contain a space.
+- With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
+- Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).
+- `build-docs` with `publish: true` needs `permissions: { pages: write, id-token: write }` and the `github-pages` environment.
+
 ## Author
 
 | [<img src="https://avatars0.githubusercontent.com/u/6591180?s=460&v=4" width="100"><br><sub>@ptsouchlos</sub>](https://github.com/ptsouchlos) |

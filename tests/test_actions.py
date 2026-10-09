@@ -25,6 +25,13 @@ def run_script(path, env):
 
 
 class ActionStructure(unittest.TestCase):
+    def test_expected_actions_exist(self):
+        found = {f.parent.name for f in action_files()}
+        self.assertEqual(
+            found,
+            {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "build-docs"},
+        )
+
     def test_every_action_is_composite_and_documented(self):
         for f in action_files():
             text = f.read_text(encoding="utf-8")
