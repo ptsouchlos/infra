@@ -1,0 +1,8 @@
+{
+  "description": "Negative: an unused variable fails the build because warnings are errors",
+  "includes": ["cpp-basic"],
+  "steps": [
+    "cmake-configure",
+    {"preset": "cmake-build", "expect": "fail", "expect_output": "unused"}
+  ]
+}

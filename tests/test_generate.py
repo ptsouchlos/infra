@@ -141,6 +141,21 @@ class GenerateTests(unittest.TestCase):
         self.assertEqual((self.out / "f.txt").read_text(encoding="utf-8"), "top")
         self.assertEqual((self.out / "g.txt").read_text(encoding="utf-8"), "mid")
 
+    def test_sanitizers_skipped_on_windows(self) -> None:
+        self.assertIn("windows", generate.load_kind("cpp-sanitizers").skip_on)
+
+    def test_warnings_error_overrides_library_source(self) -> None:
+        generate.generate("cpp-warnings-error", self.out)
+        self.assertIn("unused", (self.out / "src" / "lib.cpp").read_text(encoding="utf-8"))
+        # inherited files are still present
+        self.assertTrue((self.out / "CMakeLists.txt").is_file())
+
+    def test_negative_kinds_expect_failure(self) -> None:
+        in_source = generate.load_kind("cpp-in-source")
+        self.assertEqual([s.expect for s in in_source.steps], ["fail"])
+        warnings = generate.load_kind("cpp-warnings-error")
+        self.assertEqual([s.expect for s in warnings.steps], ["pass", "fail"])
+
 
 if __name__ == "__main__":
     unittest.main()

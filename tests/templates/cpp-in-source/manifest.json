@@ -1,0 +1,12 @@
+{
+  "description": "Negative: configuring with the build dir equal to the source dir is rejected",
+  "includes": ["cpp-basic"],
+  "steps": [
+    {
+      "name": "configure in source",
+      "cmd": ["cmake", "-S", "@PROJECT_DIR@", "-B", "@PROJECT_DIR@"],
+      "expect": "fail",
+      "expect_output": "in-source builds are disabled"
+    }
+  ]
+}
