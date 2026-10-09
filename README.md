@@ -46,6 +46,11 @@ must run before the targets it should affect are created, as must `pt_enable_ipo
 
 See `NOTICE.md` for upstream attribution.
 
+## Tests
+
+`tests/` generates throwaway projects that exercise each module on Linux, macOS and Windows.
+See [tests/README.md](tests/README.md).
+
 ## Author
 
 | [<img src="https://avatars0.githubusercontent.com/u/6591180?s=460&v=4" width="100"><br><sub>@ptsouchlos</sub>](https://github.com/ptsouchlos) |
