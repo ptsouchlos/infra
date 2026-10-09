@@ -43,7 +43,8 @@ jobs:
           - { name: macos appleclang, os: macos-latest, compiler: appleclang }
           - { name: windows msvc, os: windows-latest, compiler: msvc }
         exclude:
-          - { kind: cpp-sanitizers, os: windows-latest }
+          - os: windows-latest
+            kind: cpp-sanitizers
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
