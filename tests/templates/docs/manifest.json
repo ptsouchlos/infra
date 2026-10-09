@@ -1,0 +1,13 @@
+{
+  "description": "Doxygen builds HTML documentation from a plain Doxyfile (warnings are errors)",
+  "steps": [
+    {"name": "doxygen", "cmd": ["doxygen", "Doxyfile"]},
+    {
+      "name": "index exists",
+      "cmd": [
+        "@PYTHON@", "-c",
+        "import pathlib, sys; sys.exit(0 if pathlib.Path('out/html/index.html').is_file() else 1)"
+      ]
+    }
+  ]
+}

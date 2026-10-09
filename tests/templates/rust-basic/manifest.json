@@ -1,0 +1,9 @@
+{
+  "description": "cargo project driven through infra's rust just recipes (format, lint)",
+  "steps": [
+    {"name": "format", "cmd": ["just", "format"]},
+    {"name": "format check", "cmd": ["cargo", "fmt", "--all", "--check"]},
+    {"name": "lint", "cmd": ["just", "lint"]},
+    {"name": "test", "cmd": ["cargo", "test"]}
+  ]
+}
