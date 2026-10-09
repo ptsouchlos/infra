@@ -156,6 +156,36 @@ class GenerateTests(unittest.TestCase):
         warnings = generate.load_kind("cpp-warnings-error")
         self.assertEqual([s.expect for s in warnings.steps], ["pass", "fail"])
 
+    def test_toolchain_var_changes_configure_command(self) -> None:
+        project = generate.generate("cpp-toolchain", self.out, overrides={"TOOLCHAIN": "llvm"})
+        configure = project.steps()[0]
+        expected = "-DCMAKE_TOOLCHAIN_FILE=%s/cpp/cmake/toolchains/llvm.cmake" % generate.INFRA_DIR.as_posix()
+        self.assertIn(expected, configure.cmd)
+        self.assertFalse(configure.extra_args)
+
+    def test_toolchain_default_is_gnu(self) -> None:
+        project = generate.generate("cpp-toolchain", self.out)
+        self.assertTrue(any(part.endswith("toolchains/gnu.cmake") for part in project.steps()[0].cmd[-1:]))
+
+    def test_every_toolchain_file_exists(self) -> None:
+        toolchains = generate.INFRA_DIR / "cpp" / "cmake" / "toolchains"
+        for name in ("gnu", "llvm", "llvm_libcxx", "appleclang", "msvc"):
+            self.assertTrue((toolchains / (name + ".cmake")).is_file(), name)
+
+    def test_install_kind_has_consumer_project(self) -> None:
+        generate.generate("cpp-install", self.out)
+        self.assertTrue((self.out / "consumer" / "CMakeLists.txt").is_file())
+        step_names = [s.name for s in generate.load_kind("cpp-install").steps]
+        self.assertEqual(
+            step_names,
+            ["configure", "build", "install", "consumer configure", "consumer build", "consumer test"],
+        )
+
+    def test_cpm_kind_uses_cpm_module(self) -> None:
+        generate.generate("cpp-cpm", self.out)
+        text = (self.out / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn("include(cpm)", text)
+
 
 if __name__ == "__main__":
     unittest.main()
