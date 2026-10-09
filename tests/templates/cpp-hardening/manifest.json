@@ -1,0 +1,9 @@
+{
+  "description": "CMake project with global hardening flags via pt_enable_hardening",
+  "includes": ["_cpp_common"],
+  "steps": [
+    {"preset": "cmake-configure", "expect_output": "Enabling Hardening"},
+    "cmake-build",
+    "cmake-test"
+  ]
+}

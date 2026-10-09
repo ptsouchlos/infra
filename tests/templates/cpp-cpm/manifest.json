@@ -1,0 +1,4 @@
+{
+  "description": "cpm bootstrap downloads and builds a pinned dependency (needs network)",
+  "steps": ["cmake-configure", "cmake-build", "cmake-test"]
+}

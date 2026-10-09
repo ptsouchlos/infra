@@ -1,0 +1,28 @@
+{
+  "description": "pt_install_library installs a package that a separate consumer project finds with find_package",
+  "includes": ["_cpp_common"],
+  "steps": [
+    "cmake-configure",
+    "cmake-build",
+    {
+      "name": "install",
+      "cmd": ["cmake", "--install", "@BUILD_DIR@", "--config", "Release", "--prefix", "@PREFIX@"]
+    },
+    {
+      "name": "consumer configure",
+      "cmd": [
+        "cmake", "-S", "@PROJECT_DIR@/consumer", "-B", "@BUILD_DIR@/consumer",
+        "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=@PREFIX@"
+      ],
+      "extra_args": true
+    },
+    {
+      "name": "consumer build",
+      "cmd": ["cmake", "--build", "@BUILD_DIR@/consumer", "--config", "Release"]
+    },
+    {
+      "name": "consumer test",
+      "cmd": ["ctest", "--test-dir", "@BUILD_DIR@/consumer", "-C", "Release", "--output-on-failure"]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "description": "cpp-basic configured through one toolchain file (--set TOOLCHAIN=gnu|llvm|llvm_libcxx|appleclang|msvc)",
+  "includes": ["cpp-basic"],
+  "vars": {"TOOLCHAIN": "gnu"},
+  "steps": [
+    {
+      "preset": "cmake-configure",
+      "cmd": [
+        "cmake", "-S", "@PROJECT_DIR@", "-B", "@BUILD_DIR@",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_TOOLCHAIN_FILE=@INFRA_DIR@/cpp/cmake/toolchains/@TOOLCHAIN@.cmake"
+      ],
+      "extra_args": false
+    },
+    "cmake-build",
+    "cmake-test"
+  ]
+}

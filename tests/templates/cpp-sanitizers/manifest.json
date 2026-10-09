@@ -1,0 +1,10 @@
+{
+  "description": "CMake project with address + undefined-behavior sanitizers via pt_enable_sanitizers",
+  "includes": ["_cpp_common"],
+  "skip_on": ["windows"],
+  "steps": [
+    "cmake-configure",
+    {"preset": "cmake-build", "expect_output": "-fsanitize="},
+    "cmake-test"
+  ]
+}
