@@ -42,9 +42,6 @@ jobs:
           - { name: linux clang, os: ubuntu-latest, compiler: clang, version: "18" }
           - { name: macos appleclang, os: macos-latest, compiler: appleclang }
           - { name: windows msvc, os: windows-latest, compiler: msvc }
-        exclude:
-          - kind: cpp-sanitizers
-            os: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
