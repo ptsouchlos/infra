@@ -94,26 +94,33 @@ def _run_kind(kind_name: str, args: argparse.Namespace, overrides: Dict[str, str
     except generate.UnknownKind:
         print("error: unknown kind %r (try --all or generate.py --list)" % kind_name, file=sys.stderr)
         return 2
+    except (generate.GenerateError, ValueError) as error:
+        print("error: %s" % error, file=sys.stderr)
+        return 2
     system = generate.current_os()
     if system in kind.skip_on:
         print("SKIP %s: not supported on %s" % (kind.name, system))
         return 0
     explicit = args.work_dir is not None
     work = Path(args.work_dir) if explicit else Path(tempfile.mkdtemp(prefix="infra-%s-" % kind.name))
+    inspect = explicit or args.keep  # keep the project for a person to look at
     try:
-        project = generate.generate(kind.name, work, overrides=overrides)
-    except generate.GenerateError as error:
-        print("error: %s" % error, file=sys.stderr)
-        return 2
-    missing = missing_tools(project)
-    if missing:
-        print("error: required tool(s) not found: %s" % ", ".join(missing), file=sys.stderr)
-        return 3
-    passed = run_project(project, args.cmake_arg, args.verbose)
-    print("%s %s (%s)" % ("PASS" if passed else "FAIL", kind.name, work))
-    if passed and not args.keep and not explicit:
-        shutil.rmtree(work, ignore_errors=True)
-    return 0 if passed else 1
+        try:
+            project = generate.generate(kind.name, work, overrides=overrides)
+            missing = missing_tools(project)
+        except generate.GenerateError as error:
+            print("error: %s" % error, file=sys.stderr)
+            return 2
+        if missing:
+            print("error: required tool(s) not found: %s" % ", ".join(missing), file=sys.stderr)
+            return 3
+        passed = run_project(project, args.cmake_arg, args.verbose)
+        print("%s %s (%s)" % ("PASS" if passed else "FAIL", kind.name, work))
+        inspect = inspect or not passed
+        return 0 if passed else 1
+    finally:
+        if not inspect:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -132,6 +139,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("give exactly one of <kind> or --all")
     if args.all and args.work_dir:
         parser.error("--work-dir cannot be combined with --all")
+    if args.all and args.overrides:
+        parser.error("--set cannot be combined with --all (it would apply to no kind)")
     try:
         overrides = dict(item.split("=", 1) for item in args.overrides)
     except ValueError:
@@ -139,7 +148,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     kinds = generate.list_kinds() if args.all else [args.kind]
     worst = 0
     for name in kinds:
-        worst = max(worst, _run_kind(name, args, overrides if not args.all else {}))
+        worst = max(worst, _run_kind(name, args, overrides))
     return worst
 
 

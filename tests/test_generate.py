@@ -203,5 +203,55 @@ class GenerateTests(unittest.TestCase):
         self.assertTrue((self.out / "Doxyfile").is_file())
 
 
+    def _bad_templates(self, manifests: dict) -> Path:
+        templates = self.tmp / "templates"
+        for name, manifest in manifests.items():
+            write_template(templates, name, manifest, {"a.txt": "x"})
+        return templates
+
+    def test_invalid_expect_value_is_rejected(self) -> None:
+        templates = self._bad_templates(
+            {"bad": {"description": "d", "steps": [{"name": "s", "cmd": ["x"], "expect": "fial"}]}}
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.load_kind("bad", templates)
+
+    def test_unknown_preset_is_rejected(self) -> None:
+        templates = self._bad_templates({"bad": {"description": "d", "steps": ["no-such-preset"]}})
+        with self.assertRaises(generate.GenerateError):
+            generate.load_kind("bad", templates)
+
+    def test_missing_required_manifest_keys_are_rejected(self) -> None:
+        templates = self._bad_templates(
+            {
+                "no-description": {"steps": [{"name": "s", "cmd": ["x"]}]},
+                "no-cmd": {"description": "d", "steps": [{"name": "s"}]},
+                "no-steps": {"description": "d"},
+            }
+        )
+        for name in ("no-description", "no-cmd", "no-steps"):
+            with self.subTest(manifest=name):
+                with self.assertRaises(generate.GenerateError):
+                    generate.load_kind(name, templates)
+
+    def test_missing_include_is_rejected(self) -> None:
+        templates = self._bad_templates(
+            {"bad": {"description": "d", "includes": ["nope"], "steps": [{"name": "s", "cmd": ["x"]}]}}
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.generate("bad", self.out, templates_dir=templates)
+
+    def test_include_cycle_is_rejected(self) -> None:
+        step = [{"name": "s", "cmd": ["x"]}]
+        templates = self._bad_templates(
+            {
+                "a": {"description": "d", "includes": ["b"], "steps": step},
+                "b": {"description": "d", "includes": ["a"], "steps": step},
+            }
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.generate("a", self.out, templates_dir=templates)
+
+
 if __name__ == "__main__":
     unittest.main()

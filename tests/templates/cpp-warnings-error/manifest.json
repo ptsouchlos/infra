@@ -3,6 +3,11 @@
   "includes": ["cpp-basic"],
   "steps": [
     "cmake-configure",
-    {"preset": "cmake-build", "expect": "fail", "expect_output": "unused"}
+    {
+      "preset": "cmake-build",
+      "cmd": ["cmake", "--build", "@BUILD_DIR@", "--config", "Release"],
+      "expect": "fail",
+      "expect_output": "unused"
+    }
   ]
 }

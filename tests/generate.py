@@ -110,13 +110,20 @@ def current_os() -> str:
 def _parse_step(spec) -> Step:
     if isinstance(spec, str):
         spec = {"preset": spec}
+    if "preset" in spec and spec["preset"] not in PRESETS:
+        raise GenerateError(
+            "unknown preset %r (known: %s)" % (spec["preset"], ", ".join(sorted(PRESETS)))
+        )
     merged: dict = dict(PRESETS[spec["preset"]]) if "preset" in spec else {}
     merged.update({key: value for key, value in spec.items() if key != "preset"})
+    expect = merged.get("expect", "pass")
+    if expect not in ("pass", "fail"):
+        raise GenerateError("step expect must be 'pass' or 'fail', got %r" % (expect,))
     return Step(
         name=merged["name"],
         cmd=tuple(merged["cmd"]),
         cwd=merged.get("cwd", "@PROJECT_DIR@"),
-        expect=merged.get("expect", "pass"),
+        expect=expect,
         expect_output=merged.get("expect_output"),
         extra_args=bool(merged.get("extra_args", False)),
     )
@@ -133,14 +140,19 @@ def load_kind(name: str, templates_dir: Path = TEMPLATES_DIR) -> Kind:
     raw = None if name.startswith("_") else _read_manifest(templates_dir, name)
     if raw is None:
         raise UnknownKind(name)
-    return Kind(
-        name=name,
-        description=raw["description"],
-        includes=tuple(raw.get("includes", ())),
-        vars=dict(raw.get("vars", {})),
-        skip_on=tuple(raw.get("skip_on", ())),
-        steps=tuple(_parse_step(spec) for spec in raw["steps"]),
-    )
+    try:
+        return Kind(
+            name=name,
+            description=raw["description"],
+            includes=tuple(raw.get("includes", ())),
+            vars=dict(raw.get("vars", {})),
+            skip_on=tuple(raw.get("skip_on", ())),
+            steps=tuple(_parse_step(spec) for spec in raw["steps"]),
+        )
+    except KeyError as error:
+        raise GenerateError(
+            "manifest for %s is missing required key %s" % (name, error)
+        ) from error
 
 
 def list_kinds(templates_dir: Path = TEMPLATES_DIR) -> List[str]:
@@ -153,12 +165,18 @@ def list_kinds(templates_dir: Path = TEMPLATES_DIR) -> List[str]:
     )
 
 
-def _chain(templates_dir: Path, name: str) -> List[str]:
+def _chain(templates_dir: Path, name: str, stack: Tuple[str, ...] = ()) -> List[str]:
     """Return template names in copy order: includes first, the kind last."""
+    if name in stack:
+        raise GenerateError("include cycle: %s" % " -> ".join(stack + (name,)))
+    if not (templates_dir / name).is_dir():
+        raise GenerateError(
+            "template %r not found (included by %s)" % (name, stack[-1] if stack else "?")
+        )
     raw = _read_manifest(templates_dir, name) or {}
     ordered: List[str] = []
     for included in raw.get("includes", ()):
-        for item in _chain(templates_dir, included):
+        for item in _chain(templates_dir, included, stack + (name,)):
             if item not in ordered:
                 ordered.append(item)
     ordered.append(name)

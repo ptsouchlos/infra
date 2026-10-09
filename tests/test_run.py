@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import argparse
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import generate
 import run
@@ -130,6 +133,47 @@ class MainTests(unittest.TestCase):
                 self.assertEqual(run.main([name]), 0)
         finally:
             generate.current_os = original  # type: ignore[assignment]
+
+
+class RunKindTests(unittest.TestCase):
+    def _args(self) -> argparse.Namespace:
+        return argparse.Namespace(work_dir=None, keep=False, cmake_arg=[], verbose=False)
+
+    def test_broken_step_token_exits_2_and_cleans_up(self) -> None:
+        bad = generate.Step(name="bad", cmd=("echo", "@BULID_DIR@"))
+        created = []
+
+        def fake_generate(kind_name, work, overrides=None, **kwargs):
+            created.append(Path(work))
+            return project_with(bad)
+
+        with mock.patch.object(generate, "generate", fake_generate):
+            code = run._run_kind("cpp-basic", self._args(), {})
+        self.assertEqual(code, 2)
+        self.assertFalse(created[0].exists())
+
+    def test_all_with_set_is_a_usage_error(self) -> None:
+        with mock.patch.object(run, "_run_kind", return_value=0):
+            with self.assertRaises(SystemExit) as caught:
+                run.main(["--all", "--set", "TOOLCHAIN=llvm"])
+        self.assertEqual(caught.exception.code, 2)
+
+
+@unittest.skipUnless(
+    shutil.which("cmake") and any(shutil.which(c) for c in ("c++", "g++", "clang++", "cl")),
+    "needs cmake and a C++ compiler",
+)
+class NegativeKindProofTests(unittest.TestCase):
+    def test_warnings_error_kind_fails_when_the_build_breaks_for_another_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = generate.generate("cpp-warnings-error", Path(tmp) / "p")
+            (project.dir / "src" / "lib.cpp").write_text("this is not C++\n", encoding="utf-8")
+            self.assertFalse(run.run_project(project))
+
+    def test_warnings_error_kind_passes_for_the_real_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = generate.generate("cpp-warnings-error", Path(tmp) / "p")
+            self.assertTrue(run.run_project(project))
 
 
 if __name__ == "__main__":
