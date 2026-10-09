@@ -2,7 +2,9 @@
 
 import os
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -108,6 +110,93 @@ class SetupCppScript(unittest.TestCase):
     def test_no_cmake_version_leaves_cmake_alone(self):
         result, _ = self.run_install(RUNNER_OS="Linux", COMPILER="gcc")
         self.assertNotIn("cmake==", result.stdout)
+
+
+HAVE_TOOLS = bool(shutil.which("cmake") and shutil.which("ninja")
+                  and (shutil.which("clang++") or shutil.which("g++")))
+
+
+@unittest.skipUnless(HAVE_TOOLS, "cmake, ninja and a C++ compiler are required")
+class CmakeBuildScript(unittest.TestCase):
+    script = ACTIONS / "cmake-build" / "run.sh"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+
+    def generate(self, kind, name="my project"):
+        out = self.tmp / name
+        subprocess.run(
+            [sys.executable, str(ROOT / "tests" / "generate.py"), kind, str(out),
+             "--infra", str(ROOT)],
+            check=True, capture_output=True, text=True)
+        return out
+
+    def run_build(self, src, **env):
+        base = {"SOURCE_DIR": str(src), "BUILD_DIR": str(src / "build dir")}
+        return run_script(self.script, {**base, **env})
+
+    def test_builds_a_project_in_a_directory_with_spaces(self):
+        src = self.generate("cpp-basic")
+        result = self.run_build(src)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for group in ("configure", "build", "test"):
+            self.assertIn(f"::group::{group}", result.stdout)
+        self.assertNotIn("::group::install", result.stdout)
+
+    def test_configure_args_are_forwarded(self):
+        src = self.generate("cpp-basic")
+        result = self.run_build(src, CONFIGURE_ARGS="-DPT_PROBE=hello -DPT_OTHER=1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        cache = (src / "build dir" / "CMakeCache.txt").read_text(encoding="utf-8")
+        self.assertIn("PT_PROBE:UNINITIALIZED=hello", cache)
+        self.assertIn("PT_OTHER:UNINITIALIZED=1", cache)
+
+    def test_run_tests_false_skips_ctest(self):
+        src = self.generate("cpp-basic")
+        result = self.run_build(src, RUN_TESTS="false")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("::group::test", result.stdout)
+
+    def test_install_prefix_installs(self):
+        src = self.generate("cpp-install")
+        prefix = self.tmp / "prefix dir"
+        result = self.run_build(src, INSTALL_PREFIX=str(prefix))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("::group::install", result.stdout)
+        self.assertTrue(any(prefix.rglob("*-config.cmake")))
+
+    def test_failing_configure_fails_the_script(self):
+        result = self.run_build(self.tmp / "does-not-exist")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("::group::configure", result.stdout)
+
+    def test_failing_build_fails_the_script(self):
+        src = self.generate("cpp-warnings-error")
+        result = self.run_build(src)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("::group::build", result.stdout)
+
+    def test_preset_configures_through_the_preset(self):
+        src = self.generate("cpp-basic")
+        (src / "CMakePresets.json").write_text(
+            '{"version": 6, "configurePresets": [{"name": "dev", "generator": '
+            '"Ninja", "binaryDir": "${sourceDir}/preset-out", "cacheVariables": '
+            '{"PT_FROM_PRESET": "yes"}}]}', encoding="utf-8")
+        result = self.run_build(src, PRESET="dev", BUILD_DIR=str(src / "preset-out"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        cache = (src / "preset-out" / "CMakeCache.txt").read_text(encoding="utf-8")
+        self.assertIn("PT_FROM_PRESET", cache)
+
+    def test_preset_with_mismatched_build_dir_fails(self):
+        src = self.generate("cpp-basic")
+        (src / "CMakePresets.json").write_text(
+            '{"version": 6, "configurePresets": [{"name": "dev", "generator": '
+            '"Ninja", "binaryDir": "${sourceDir}/preset-out"}]}', encoding="utf-8")
+        result = self.run_build(src, PRESET="dev", BUILD_DIR=str(src / "elsewhere"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("::error::", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

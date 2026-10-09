@@ -1,0 +1,58 @@
+name: Build with CMake
+description: Configure, build, test and optionally install a CMake project with Ninja, with optional ccache and CPM caches.
+inputs:
+  source-dir:
+    description: Directory containing the top-level CMakeLists.txt.
+    default: "."
+  build-dir:
+    description: Build directory. With a preset, it must match the preset's binaryDir.
+    default: build
+  build-type:
+    description: CMAKE_BUILD_TYPE (ignored by the configure step when a preset is used).
+    default: Release
+  preset:
+    description: Optional configure preset name.
+    default: ""
+  configure-args:
+    description: Extra configure arguments, space-separated (no embedded spaces within one argument).
+    default: ""
+  test:
+    description: Run ctest after building.
+    default: "true"
+  install-prefix:
+    description: If set, run cmake --install into this prefix. Use forward slashes on Windows.
+    default: ""
+  ccache:
+    description: Cache compilations with ccache.
+    default: "false"
+  cpm-cache:
+    description: Cache CPM downloads in .cpm-cache.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Restore ccache
+      if: inputs.ccache == 'true'
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ runner.os }}-${{ env.CC }}-${{ inputs.build-type }}
+    - name: Restore the CPM cache
+      if: inputs.cpm-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.cpm-cache
+        key: cpm-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+        restore-keys: cpm-${{ runner.os }}-
+    - name: Build
+      shell: bash
+      env:
+        SOURCE_DIR: ${{ inputs.source-dir }}
+        BUILD_DIR: ${{ inputs.build-dir }}
+        BUILD_TYPE: ${{ inputs.build-type }}
+        PRESET: ${{ inputs.preset }}
+        CONFIGURE_ARGS: ${{ inputs.configure-args }}
+        RUN_TESTS: ${{ inputs.test }}
+        INSTALL_PREFIX: ${{ inputs.install-prefix }}
+        CCACHE: ${{ inputs.ccache }}
+        CPM_SOURCE_CACHE: ${{ inputs.cpm-cache == 'true' && format('{0}/.cpm-cache', github.workspace) || '' }}
+      run: bash "${{ github.action_path }}/run.sh"
