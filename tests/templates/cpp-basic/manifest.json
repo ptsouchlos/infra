@@ -1,0 +1,5 @@
+{
+  "description": "CMake project using project settings, compiler warnings (as errors) and the in-source-build guard",
+  "includes": ["_cpp_common"],
+  "steps": ["cmake-configure", "cmake-build", "cmake-test"]
+}
