@@ -1,0 +1,36 @@
+name: Set up Rust
+description: Install a Rust toolchain with rustup, cache cargo output, and optionally install just.
+inputs:
+  toolchain:
+    description: Toolchain to install and make the default.
+    default: stable
+  components:
+    description: Space-separated rustup components.
+    default: rustfmt clippy
+  just:
+    description: Also install just.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install the toolchain
+      shell: bash
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        args=()
+        for c in $COMPONENTS; do
+          args+=(--component "$c")
+        done
+        if [ "${#args[@]}" -gt 0 ]; then
+          rustup toolchain install "$TOOLCHAIN" --profile minimal --no-self-update "${args[@]}"
+        else
+          rustup toolchain install "$TOOLCHAIN" --profile minimal --no-self-update
+        fi
+        rustup default "$TOOLCHAIN"
+    - name: Cache cargo output
+      uses: Swatinem/rust-cache@v2
+    - name: Install just
+      if: inputs.just == 'true'
+      uses: extractions/setup-just@v2

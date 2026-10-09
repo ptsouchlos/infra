@@ -1,0 +1,48 @@
+name: Build docs
+description: Install Doxygen and Graphviz, build documentation, and optionally publish it to GitHub Pages.
+inputs:
+  working-directory:
+    description: Directory to run Doxygen in.
+    default: "."
+  doxyfile:
+    description: Doxyfile path, relative to working-directory.
+    default: Doxyfile
+  html-dir:
+    description: HTML output directory, relative to working-directory. Must match the Doxyfile.
+    default: html
+  publish:
+    description: Upload the HTML as a Pages artifact and deploy it. The job needs pages and id-token write permissions.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install Doxygen and Graphviz
+      shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          Linux) sudo apt-get update && sudo apt-get install -y doxygen graphviz ;;
+          macOS) brew install doxygen graphviz ;;
+          Windows) choco install doxygen.install graphviz -y --no-progress ;;
+          *) echo "::error::unsupported OS $RUNNER_OS"; exit 1 ;;
+        esac
+        if [ "$RUNNER_OS" = Windows ]; then
+          echo "C:/Program Files/doxygen/bin" >> "$GITHUB_PATH"
+          echo "C:/Program Files/Graphviz/bin" >> "$GITHUB_PATH"
+        fi
+    - name: Build
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        DOXYFILE: ${{ inputs.doxyfile }}
+        HTML_DIR: ${{ inputs.html-dir }}
+      run: |
+        doxygen "$DOXYFILE"
+        test -f "$HTML_DIR/index.html" || { echo "::error::no $HTML_DIR/index.html after doxygen; check html-dir against the Doxyfile"; exit 1; }
+    - name: Upload Pages artifact
+      if: inputs.publish == 'true'
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ${{ inputs.working-directory }}/${{ inputs.html-dir }}
+    - name: Deploy to Pages
+      if: inputs.publish == 'true'
+      uses: actions/deploy-pages@v4

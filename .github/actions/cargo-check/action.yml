@@ -1,0 +1,38 @@
+name: Check Rust
+description: Run cargo fmt --check, clippy and tests.
+inputs:
+  working-directory:
+    description: Directory containing Cargo.toml.
+    default: "."
+  fmt:
+    description: Run cargo fmt --check.
+    default: "true"
+  clippy:
+    description: Run cargo clippy.
+    default: "true"
+  clippy-args:
+    description: Arguments after -- for clippy.
+    default: -D warnings
+  test:
+    description: Run cargo test.
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Format
+      if: inputs.fmt == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo fmt --all --check
+    - name: Clippy
+      if: inputs.clippy == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLIPPY_ARGS: ${{ inputs.clippy-args }}
+      run: cargo clippy --all-targets -- $CLIPPY_ARGS
+    - name: Test
+      if: inputs.test == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo test
