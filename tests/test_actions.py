@@ -3,6 +3,7 @@
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,14 @@ class SetupCppScript(unittest.TestCase):
         self.assertNotIn("cmake==", result.stdout)
 
 
+def can_reach(host, port=443):
+    try:
+        with socket.create_connection((host, port), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
 HAVE_TOOLS = bool(shutil.which("cmake") and shutil.which("ninja")
                   and (shutil.which("clang++") or shutil.which("g++")))
 
@@ -173,6 +182,31 @@ class CmakeBuildScript(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("::group::install", result.stdout)
         self.assertTrue(any(prefix.rglob("*-config.cmake")))
+
+    def test_demo_projects_build_through_the_script(self):
+        # The same kinds ci.yml feeds through the cmake-build action.
+        env = {}
+        if shutil.which("clang++"):  # gcc hosts may lack the sanitizer runtimes
+            env = {"CC": "clang", "CXX": "clang++"}
+        for kind in ("cpp-basic", "cpp-hardening", "cpp-sanitizers", "cpp-cpm"):
+            with self.subTest(kind=kind):
+                if kind == "cpp-cpm" and not can_reach("github.com"):
+                    self.skipTest("no network")
+                src = self.generate(kind, name=kind)
+                result = self.run_build(src, **env)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_install_then_consumer_build(self):
+        src = self.generate("cpp-install")
+        prefix = self.tmp / "prefix"
+        result = self.run_build(src, INSTALL_PREFIX=str(prefix))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = run_script(self.script, {
+            "SOURCE_DIR": str(src / "consumer"),
+            "BUILD_DIR": str(src / "build" / "consumer"),
+            "CONFIGURE_ARGS": f"-DCMAKE_PREFIX_PATH={prefix}",
+        })
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_failing_configure_fails_the_script(self):
         result = self.run_build(self.tmp / "does-not-exist")
