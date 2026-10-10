@@ -31,17 +31,21 @@ jobs:
 
   # Generates each demo project from tests/templates and drives it through the composite actions.
   cpp:
-    name: ${{ matrix.kind }} (${{ matrix.name }})
+    name: ${{ matrix.kind }} (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         kind: [cpp-basic, cpp-hardening, cpp-sanitizers, cpp-install, cpp-cpm]
+        platform: [linux-gcc, linux-clang, macos-appleclang, windows-msvc]
+        # Each include entry names its platform, so it adds os/compiler to every kind on that platform.
         include:
-          - { name: linux gcc, os: ubuntu-latest, compiler: gcc, version: "14" }
-          - { name: linux clang, os: ubuntu-latest, compiler: clang, version: "18" }
-          - { name: macos appleclang, os: macos-latest, compiler: appleclang }
-          - { name: windows msvc, os: windows-latest, compiler: msvc }
+          - { platform: linux-gcc, os: ubuntu-latest, compiler: gcc, version: "14" }
+          - { platform: linux-clang, os: ubuntu-latest, compiler: clang, version: "18" }
+          - { platform: macos-appleclang, os: macos-latest, compiler: appleclang }
+          - { platform: windows-msvc, os: windows-latest, compiler: msvc }
+        exclude:
+          - { kind: cpp-sanitizers, platform: windows-msvc }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -18,10 +18,21 @@ def action_files():
     return sorted(ACTIONS.glob("*/action.yml"))
 
 
+def find_bash():
+    # On Windows, PATH finds WSL's System32\bash.exe first; the actions run under Git Bash.
+    if sys.platform == "win32":
+        git = shutil.which("git")
+        if git:
+            candidate = Path(git).resolve().parent.parent / "bin" / "bash.exe"
+            if candidate.is_file():
+                return str(candidate)
+    return shutil.which("bash") or "bash"
+
+
 def run_script(path, env):
     full = {**os.environ, **env}
     return subprocess.run(
-        ["bash", str(path)], env=full, capture_output=True, text=True
+        [find_bash(), str(path)], env=full, capture_output=True, text=True
     )
 
 
@@ -132,6 +143,8 @@ HAVE_TOOLS = bool(shutil.which("cmake") and shutil.which("ninja")
                   and (shutil.which("clang++") or shutil.which("g++")))
 
 
+@unittest.skipIf(sys.platform == "win32",
+                 "needs the MSVC environment; the cpp CI jobs cover Windows")
 @unittest.skipUnless(HAVE_TOOLS, "cmake, ninja and a C++ compiler are required")
 class CmakeBuildScript(unittest.TestCase):
     script = ACTIONS / "cmake-build" / "run.sh"
