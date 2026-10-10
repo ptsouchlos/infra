@@ -29,6 +29,7 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-install` | `pt_install_library` output is found by a separate consumer via `find_package` |
 | `cpp-cpm` | `cpm` bootstrap fetches and builds a pinned dependency (network) |
 | `cpp-toolchain` | a toolchain file configures and builds (`--set TOOLCHAIN=...`) |
+| `cpp-just` | `cpp/just/cmake.just` configure, build and test recipes (also run natively on all three OSes in CI) |
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
 | `docs` | Doxygen builds from a plain `Doxyfile` |
