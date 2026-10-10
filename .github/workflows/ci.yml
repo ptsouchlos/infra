@@ -73,7 +73,12 @@ jobs:
           configure-args: -DCMAKE_PREFIX_PATH=${{ github.workspace }}/_demo/cpp-install/prefix
 
   rust:
-    runs-on: ubuntu-latest
+    name: rust-basic (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
