@@ -1,0 +1,9 @@
+{
+  "description": "cpp-basic built through infra's cmake.just recipes (configure, build, test)",
+  "includes": ["cpp-basic"],
+  "steps": [
+    {"name": "just configure", "cmd": ["just", "configure"]},
+    {"name": "just build", "cmd": ["just", "build"]},
+    {"name": "just test", "cmd": ["just", "test"]}
+  ]
+}

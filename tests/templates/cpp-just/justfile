@@ -1,0 +1,4 @@
+set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
+set shell := ["bash", "-c"]
+
+import '@INFRA_DIR@/cpp/just/cmake.just'
