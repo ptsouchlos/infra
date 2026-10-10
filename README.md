@@ -90,6 +90,12 @@ Notes:
 - Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).
 - `build-docs` with `publish: true` needs `permissions: { pages: write, id-token: write }` and the `github-pages` environment.
 
+### Releasing
+
+Push a `vX.Y.Z` tag. `release.yml` moves the floating `vX` tag to it and creates a GitHub release
+with generated notes. Downstream repos pin `@vX` and get the update. The first release should be
+`v1.0.0`; until it exists, `@v1` does not resolve.
+
 ## Author
 
 | [<img src="https://avatars0.githubusercontent.com/u/6591180?s=460&v=4" width="100"><br><sub>@ptsouchlos</sub>](https://github.com/ptsouchlos) |
