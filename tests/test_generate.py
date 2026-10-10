@@ -167,6 +167,12 @@ class GenerateTests(unittest.TestCase):
         project = generate.generate("cpp-toolchain", self.out)
         self.assertTrue(any(part.endswith("toolchains/gnu.cmake") for part in project.steps()[0].cmd[-1:]))
 
+    def test_just_kind_imports_cmake_recipes_and_runs_them(self) -> None:
+        project = generate.generate("cpp-just", self.out)
+        justfile = (self.out / "justfile").read_text(encoding="utf-8")
+        self.assertIn("import '%s/cpp/just/cmake.just'" % generate.INFRA_DIR.as_posix(), justfile)
+        self.assertEqual([list(s.cmd) for s in project.steps()], [["just", "configure"], ["just", "build"], ["just", "test"]])
+
     def test_every_toolchain_file_exists(self) -> None:
         toolchains = generate.INFRA_DIR / "cpp" / "cmake" / "toolchains"
         for name in ("gnu", "llvm", "llvm_libcxx", "appleclang", "msvc"):
