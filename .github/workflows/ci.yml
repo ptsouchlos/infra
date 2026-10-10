@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the unit tests
+        shell: bash
+        run: python -m unittest discover -s tests
+
+  # Generates each demo project from tests/templates and drives it through the composite actions.
+  cpp:
+    name: ${{ matrix.kind }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [cpp-basic, cpp-hardening, cpp-sanitizers, cpp-install, cpp-cpm]
+        platform: [linux-gcc, linux-clang, macos-appleclang, windows-msvc]
+        # Each include entry names its platform, so it adds os/compiler to every kind on that platform.
+        include:
+          - { platform: linux-gcc, os: ubuntu-latest, compiler: gcc, version: "14" }
+          - { platform: linux-clang, os: ubuntu-latest, compiler: clang, version: "18" }
+          - { platform: macos-appleclang, os: macos-latest, compiler: appleclang }
+          - { platform: windows-msvc, os: windows-latest, compiler: msvc }
+        exclude:
+          - { kind: cpp-sanitizers, platform: windows-msvc }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        shell: bash
+        run: python tests/generate.py ${{ matrix.kind }} _demo/${{ matrix.kind }}
+      - uses: ./.github/actions/setup-cpp
+        with:
+          compiler: ${{ matrix.compiler }}
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/cmake-build
+        with:
+          source-dir: _demo/${{ matrix.kind }}
+          build-dir: _demo/${{ matrix.kind }}/build
+          install-prefix: ${{ matrix.kind == 'cpp-install' && format('{0}/_demo/cpp-install/prefix', github.workspace) || '' }}
+          cpm-cache: "true"
+      - name: Build the cpp-install consumer
+        if: matrix.kind == 'cpp-install'
+        uses: ./.github/actions/cmake-build
+        with:
+          source-dir: _demo/cpp-install/consumer
+          build-dir: _demo/cpp-install/build/consumer
+          configure-args: -DCMAKE_PREFIX_PATH=${{ github.workspace }}/_demo/cpp-install/prefix
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          just: "true"
+      - uses: ./.github/actions/cargo-check
+        with:
+          working-directory: _demo/rust-basic
+      - name: Run the infra just recipes
+        working-directory: _demo/rust-basic
+        run: |
+          just format
+          just lint
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py docs _demo/docs
+      - uses: ./.github/actions/build-docs
+        with:
+          working-directory: _demo/docs
+          html-dir: out/html

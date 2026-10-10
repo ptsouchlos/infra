@@ -1,0 +1,25 @@
+name: Set up C++
+description: Install a C++ compiler, CMake and Ninja, and export CC/CXX.
+inputs:
+  compiler:
+    description: "Compiler: gcc or clang (Linux), appleclang (macOS), msvc (Windows)."
+    required: true
+  version:
+    description: Compiler major version on Linux (for example 14). Empty uses the distro default.
+    default: ""
+  cmake-version:
+    description: Exact CMake version to install with pip. Empty keeps the runner's CMake.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install toolchain
+      shell: bash
+      env:
+        COMPILER: ${{ inputs.compiler }}
+        VERSION: ${{ inputs.version }}
+        CMAKE_VERSION: ${{ inputs.cmake-version }}
+      run: bash "${{ github.action_path }}/install.sh"
+    - name: Set up the MSVC environment
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1

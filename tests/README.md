@@ -45,3 +45,9 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 3. Use `@INFRA_DIR@`, `@PROJECT_DIR@`, `@BUILD_DIR@`, `@PREFIX@`, `@PYTHON@`, `@PROJECT_NAME@` and
    your `vars` as `@TOKENS@` in files and steps. An unresolved token is an error.
 4. Add a test to `test_generate.py` and run the unit tests.
+
+## Action tests
+
+`test_actions.py` checks the composite actions in `.github/actions/`: structure rules (shell on every
+run step, no PowerShell-only code, pinned third-party actions) and the `install.sh`/`run.sh`
+scripts. The build tests need cmake, ninja and a C++ compiler and are skipped without them.
