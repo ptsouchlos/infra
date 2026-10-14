@@ -323,6 +323,14 @@ class GenerateTests(unittest.TestCase):
         self.assertEqual(kind.steps[-1].name, "trace exists")
         self.assertIn("include(telemetry)", self._cmake_text("cpp-telemetry"))
 
+    def test_import_std_kind_enables_the_module_before_project(self) -> None:
+        kind = generate.load_kind("cpp-import-std")
+        self.assertEqual(kind.skip_on, ("darwin",))
+        self.assertEqual(kind.required_tools("linux"), ("ninja",))
+        text = self._cmake_text("cpp-import-std")
+        self.assertLess(text.index("include(enable_import_std)"), text.index("project("))
+        self.assertIn("-G", kind.steps[0].cmd)
+
     def test_ipo_kind_enables_ipo_before_any_target(self) -> None:
         self.assertEqual(generate.load_kind("cpp-ipo").vars, {"IPO_FLAG": "-flto"})
         text = self._cmake_text("cpp-ipo")
