@@ -141,6 +141,40 @@ jobs:
         shell: bash
         run: python tests/run.py ${{ matrix.kind }} ${{ matrix.args }} --verbose
 
+  # The telemetry module needs CMake 4.3, which setup-cpp installs from the pip wheel.
+  telemetry:
+    name: cpp-telemetry (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-gcc, os: ubuntu-latest, compiler: gcc, version: "14" }
+          - { platform: macos-appleclang, os: macos-latest, compiler: appleclang }
+          - { platform: windows-msvc, os: windows-latest, compiler: msvc }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: ./.github/actions/setup-cpp
+        with:
+          compiler: ${{ matrix.compiler }}
+          version: ${{ matrix.version }}
+          cmake-version: "4.3.0"
+      - name: Install jq
+        if: matrix.os == 'macos-latest'
+        run: brew install jq
+      - name: Show the tools the callback needs
+        shell: bash
+        run: |
+          cmake --version
+          jq --version
+          which -a bash
+      - name: Run the demo project
+        shell: bash
+        run: python tests/run.py cpp-telemetry --verbose
+
   rust:
     name: rust-basic (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

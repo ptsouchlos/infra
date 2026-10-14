@@ -1,0 +1,18 @@
+{
+  "description": "Including telemetry enables build instrumentation; traces land in <build>/.trace (CMake >= 4.3)",
+  "includes": ["_cpp_common"],
+  "requires": {"all": ["bash", "jq"]},
+  "steps": [
+    {"preset": "cmake-configure", "expect_output": "Configuring Build Telemetry"},
+    "cmake-build",
+    "cmake-test",
+    {
+      "name": "trace exists",
+      "cmd": [
+        "@PYTHON@", "-c",
+        "import pathlib, sys; t = pathlib.Path(sys.argv[1]) / '.trace'; sys.exit(0 if t.is_dir() and any(t.iterdir()) else 1)",
+        "@BUILD_DIR@"
+      ]
+    }
+  ]
+}
