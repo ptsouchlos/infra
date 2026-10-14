@@ -98,6 +98,42 @@ class GenerateTests(unittest.TestCase):
     def test_cli_reports_bad_set_cleanly(self) -> None:
         self.assertEqual(generate.main(["cpp-basic", str(self.out), "--set", "oops"]), 2)
 
+    def test_manifest_with_utf8_bom_loads(self) -> None:
+        templates = self.tmp / "templates"
+        (templates / "bom").mkdir(parents=True)
+        (templates / "bom" / "manifest.json").write_bytes(
+            b"\xef\xbb\xbf" + b'{"description": "d", "steps": [{"name": "s", "cmd": ["true"]}]}'
+        )
+        self.assertEqual(generate.load_kind("bom", templates).description, "d")
+
+    def test_nested_manifest_json_is_copied_as_a_project_file(self) -> None:
+        templates = self.tmp / "templates"
+        write_template(
+            templates,
+            "nested",
+            {"description": "d", "steps": [{"name": "s", "cmd": ["true"]}]},
+            {"sub/manifest.json": '{"payload": 1}'},
+        )
+        generate.generate("nested", self.out, templates_dir=templates)
+        self.assertTrue((self.out / "sub" / "manifest.json").is_file())
+        self.assertFalse((self.out / "manifest.json").exists())
+
+    def test_lowercase_token_typo_is_an_error(self) -> None:
+        templates = self.tmp / "templates"
+        write_template(
+            templates,
+            "typo",
+            {"description": "d", "steps": [{"name": "s", "cmd": ["true"]}]},
+            {"file.txt": "path: @project_dir@\n"},
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.generate("typo", self.out, templates_dir=templates)
+
+    def test_infra_path_with_single_quote_is_rejected(self) -> None:
+        with self.assertRaises(generate.GenerateError) as caught:
+            generate.generate("cpp-basic", self.out, infra_dir=self.tmp / "it's here")
+        self.assertIn("single quote", str(caught.exception))
+
     def test_output_path_with_spaces_survives(self) -> None:
         spaced = self.tmp / "dir with spaces" / "project"
         project = generate.generate("cpp-basic", spaced)

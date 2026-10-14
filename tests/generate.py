@@ -20,7 +20,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = TESTS_DIR / "templates"
 INFRA_DIR = TESTS_DIR.parent
 MANIFEST = "manifest.json"
-UNRESOLVED = re.compile(r"@[A-Z][A-Z0-9_]*@")
+UNRESOLVED = re.compile(r"@[A-Za-z][A-Za-z0-9_]*@")
 
 PRESETS: Dict[str, dict] = {
     "cmake-configure": {
@@ -133,7 +133,7 @@ def _read_manifest(templates_dir: Path, name: str) -> Optional[dict]:
     path = templates_dir / name / MANIFEST
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
 def load_kind(name: str, templates_dir: Path = TEMPLATES_DIR) -> Kind:
@@ -185,7 +185,7 @@ def _chain(templates_dir: Path, name: str, stack: Tuple[str, ...] = ()) -> List[
 
 def _copy_template(source: Path, destination: Path, project: Project) -> None:
     for path in sorted(source.rglob("*")):
-        if path.is_dir() or path.name == MANIFEST:
+        if path.is_dir() or path == source / MANIFEST:
             continue
         target = destination / path.relative_to(source)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -211,6 +211,11 @@ def generate(
         raise GenerateError(
             "unknown variable(s) %s for kind %s (known: %s)"
             % (", ".join(unknown), kind_name, ", ".join(sorted(kind.vars)) or "none")
+        )
+    if "'" in Path(infra_dir).resolve().as_posix():
+        raise GenerateError(
+            "infra path %r contains a single quote, which just import strings cannot hold"
+            % Path(infra_dir).resolve().as_posix()
         )
     out = Path(out_dir).resolve()
     if out.exists() and any(out.iterdir()) and not force:
