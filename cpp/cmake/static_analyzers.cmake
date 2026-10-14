@@ -56,10 +56,11 @@ macro(pt_enable_clang_tidy target WARNINGS_AS_ERRORS)
 
   find_program(CLANGTIDY clang-tidy)
   if(CLANGTIDY)
-    if(NOT
-       CMAKE_CXX_COMPILER_ID
-       MATCHES
-       ".*Clang")
+    if(TARGET ${target}
+       AND NOT
+           CMAKE_CXX_COMPILER_ID
+           MATCHES
+           ".*Clang")
 
       get_target_property(TARGET_PCH ${target} INTERFACE_PRECOMPILE_HEADERS)
 

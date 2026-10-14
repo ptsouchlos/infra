@@ -303,6 +303,20 @@ class GenerateTests(unittest.TestCase):
         project = generate.generate("cpp-linker", self.out)
         self.assertEqual(project.steps()[1].expect_output, "")
 
+    def test_static_analyzers_kind_needs_the_three_tools(self) -> None:
+        kind = generate.load_kind("cpp-static-analyzers")
+        self.assertEqual(sorted(kind.skip_on), ["darwin", "windows"])
+        self.assertEqual(
+            sorted(kind.required_tools("linux")), ["clang-tidy", "cppcheck", "include-what-you-use"]
+        )
+        self.assertIn("include(static_analyzers)", self._cmake_text("cpp-static-analyzers"))
+
+    def test_static_analyzers_error_kind_expects_the_build_to_fail(self) -> None:
+        kind = generate.load_kind("cpp-static-analyzers-error")
+        self.assertEqual([s.expect for s in kind.steps], ["pass", "fail"])
+        generate.generate("cpp-static-analyzers-error", self.out)
+        self.assertIn("int unset;", (self.out / "src" / "lib.cpp").read_text(encoding="utf-8"))
+
     def test_ipo_kind_enables_ipo_before_any_target(self) -> None:
         self.assertEqual(generate.load_kind("cpp-ipo").vars, {"IPO_FLAG": "-flto"})
         text = self._cmake_text("cpp-ipo")
