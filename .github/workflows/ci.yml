@@ -89,6 +89,25 @@ jobs:
       - name: Run the cpp-just demo project
         run: python tests/run.py cpp-just --verbose
 
+  # The just recipes use the [doc] attribute, which arrived in just 1.27.0.
+  just-min:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: extractions/setup-just@v2
+        with:
+          just-version: "1.27.0"
+      - uses: ./.github/actions/setup-rust
+      - name: Run the just kinds on the oldest supported just
+        shell: bash
+        run: |
+          just --version
+          python tests/run.py cpp-just
+          python tests/run.py rust-basic
+
   rust:
     name: rust-basic (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

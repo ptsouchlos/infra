@@ -32,6 +32,9 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-just` | `cpp/just/cmake.just` configure, build and test recipes (also run natively on all three OSes in CI) |
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
+
+The two `just` kinds need `just` 1.27.0 or newer (older versions reject the `[doc]` attribute); CI
+checks the floor with a `just-min` job.
 | `docs` | Doxygen builds from a plain `Doxyfile` |
 
 ## Add a kind
