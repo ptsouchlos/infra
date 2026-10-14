@@ -83,6 +83,21 @@ class GenerateTests(unittest.TestCase):
         with self.assertRaises(generate.GenerateError):
             generate.generate("cpp-basic", self.out, overrides={"NOPE": "1"})
 
+    def test_parse_overrides_splits_on_first_equals(self) -> None:
+        self.assertEqual(
+            generate.parse_overrides(["A=1", "B=x=y", "C="]),
+            {"A": "1", "B": "x=y", "C": ""},
+        )
+
+    def test_parse_overrides_rejects_missing_equals(self) -> None:
+        with self.assertRaises(generate.GenerateError) as caught:
+            generate.parse_overrides(["oops"])
+        self.assertIn("KEY=VALUE", str(caught.exception))
+        self.assertIn("oops", str(caught.exception))
+
+    def test_cli_reports_bad_set_cleanly(self) -> None:
+        self.assertEqual(generate.main(["cpp-basic", str(self.out), "--set", "oops"]), 2)
+
     def test_output_path_with_spaces_survives(self) -> None:
         spaced = self.tmp / "dir with spaces" / "project"
         project = generate.generate("cpp-basic", spaced)

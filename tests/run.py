@@ -142,9 +142,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.all and args.overrides:
         parser.error("--set cannot be combined with --all (it would apply to no kind)")
     try:
-        overrides = dict(item.split("=", 1) for item in args.overrides)
-    except ValueError:
-        parser.error("--set expects KEY=VALUE")
+        overrides = generate.parse_overrides(args.overrides)
+    except generate.GenerateError as error:
+        parser.error(str(error))
     kinds = generate.list_kinds() if args.all else [args.kind]
     worst = 0
     for name in kinds:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import shutil
 import sys
 import tempfile
@@ -120,6 +122,13 @@ class MissingToolsTests(unittest.TestCase):
 class MainTests(unittest.TestCase):
     def test_unknown_kind_exits_2(self) -> None:
         self.assertEqual(run.main(["nope"]), 2)
+
+    def test_bad_set_is_a_usage_error_with_a_clear_message(self) -> None:
+        with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()) as err:
+            run.main(["cpp-basic", "--set", "oops"])
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("KEY=VALUE", err.getvalue())
+        self.assertIn("oops", err.getvalue())
 
     def test_skipped_kind_exits_0(self) -> None:
         original = generate.current_os

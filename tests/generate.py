@@ -14,7 +14,7 @@ import re
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 TESTS_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = TESTS_DIR / "templates"
@@ -232,6 +232,16 @@ def generate(
     return project
 
 
+def parse_overrides(items: Sequence[str]) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    for item in items:
+        key, separator, value = item.partition("=")
+        if not separator or not key:
+            raise GenerateError("--set expects KEY=VALUE, got %r" % item)
+        result[key] = value
+    return result
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -250,7 +260,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.kind or not args.out_dir:
         parser.error("kind and out_dir are required")
     try:
-        overrides = dict(item.split("=", 1) for item in args.overrides)
+        overrides = parse_overrides(args.overrides)
         project = generate(
             args.kind, args.out_dir, infra_dir=args.infra, overrides=overrides, force=args.force
         )
