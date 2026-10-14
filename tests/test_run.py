@@ -6,6 +6,7 @@ import io
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -93,6 +94,43 @@ class RunStepTests(unittest.TestCase):
         self.assertTrue(run.run_step(project, step))
 
 
+class RunStepRobustnessTests(unittest.TestCase):
+    def test_step_timeout_kills_and_fails(self) -> None:
+        project = project_with(py("import time; time.sleep(30)"))
+        started = time.monotonic()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            ok = run.run_step(project, project.kind.steps[0], timeout=1)
+        self.assertFalse(ok)
+        self.assertLess(time.monotonic() - started, 15)
+        self.assertIn("timed out", out.getvalue())
+
+    @unittest.skipIf(sys.platform == "win32", "needs a non-executable file")
+    def test_unexecutable_command_fails_cleanly(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        script = Path(tmp.name) / "not-executable"
+        script.write_text("echo hi\n", encoding="utf-8")
+        script.chmod(0o644)
+        step = generate.Step(name="bad", cmd=(str(script),))
+        project = project_with(step)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertFalse(run.run_step(project, step))
+        self.assertIn("cannot run", out.getvalue())
+
+    @unittest.skipIf(sys.platform == "win32", "uses POSIX permission bits")
+    def test_force_rmtree_removes_read_only_entries(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "tree"
+        sub = root / "sub"
+        sub.mkdir(parents=True)
+        (sub / "file").write_text("x", encoding="utf-8")
+        (sub / "file").chmod(0o444)
+        sub.chmod(0o555)
+        run.force_rmtree(root)
+        self.assertFalse(root.exists())
+
+
 class RunProjectTests(unittest.TestCase):
     def test_stops_at_first_failure(self) -> None:
         marker = tempfile.NamedTemporaryFile(delete=False)
@@ -146,7 +184,7 @@ class MainTests(unittest.TestCase):
 
 class RunKindTests(unittest.TestCase):
     def _args(self) -> argparse.Namespace:
-        return argparse.Namespace(work_dir=None, keep=False, cmake_arg=[], verbose=False)
+        return argparse.Namespace(work_dir=None, keep=False, cmake_arg=[], verbose=False, timeout=None)
 
     def test_broken_step_token_exits_2_and_cleans_up(self) -> None:
         bad = generate.Step(name="bad", cmd=("echo", "@BULID_DIR@"))
