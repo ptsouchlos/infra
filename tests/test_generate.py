@@ -317,6 +317,12 @@ class GenerateTests(unittest.TestCase):
         generate.generate("cpp-static-analyzers-error", self.out)
         self.assertIn("int unset;", (self.out / "src" / "lib.cpp").read_text(encoding="utf-8"))
 
+    def test_telemetry_kind_needs_bash_and_jq_and_checks_the_trace(self) -> None:
+        kind = generate.load_kind("cpp-telemetry")
+        self.assertEqual(sorted(kind.required_tools("linux")), ["bash", "jq"])
+        self.assertEqual(kind.steps[-1].name, "trace exists")
+        self.assertIn("include(telemetry)", self._cmake_text("cpp-telemetry"))
+
     def test_ipo_kind_enables_ipo_before_any_target(self) -> None:
         self.assertEqual(generate.load_kind("cpp-ipo").vars, {"IPO_FLAG": "-flto"})
         text = self._cmake_text("cpp-ipo")

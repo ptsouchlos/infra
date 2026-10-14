@@ -35,6 +35,7 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-ipo` | `pt_enable_ipo` adds `-flto` to the build (`--set IPO_FLAG=/GL` for MSVC; the Visual Studio generators do not echo compiler flags, so CI on Windows passes `--set IPO_FLAG=` and only checks build and test) |
 | `cpp-static-analyzers` | cppcheck, clang-tidy and include-what-you-use run during the build (needs all three; not run on macOS or Windows; the kind ships a `.clang-tidy` because clang-tidy refuses to run with no checks) |
 | `cpp-static-analyzers-error` | negative case: a cppcheck `uninitvar` finding fails the build when warnings are errors |
+| `cpp-telemetry` | including `telemetry` enables build instrumentation and traces land in `<build>/.trace` (needs CMake 4.3 or newer, `bash` and `jq`; older CMake makes the configure assertion fail) |
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
 
