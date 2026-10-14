@@ -1,0 +1,6 @@
+{
+  "description": "pt_enable_ipo turns on interprocedural optimization (--set IPO_FLAG=/GL on MSVC)",
+  "includes": ["_cpp_common"],
+  "vars": {"IPO_FLAG": "-flto"},
+  "steps": ["cmake-configure", {"preset": "cmake-build", "expect_output": "@IPO_FLAG@"}, "cmake-test"]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "pt_enable_cache wires ccache as the compiler launcher",
+  "includes": ["_cpp_common"],
+  "skip_on": ["windows"],
+  "requires": {"all": ["ccache"]},
+  "steps": [
+    {"preset": "cmake-configure", "expect_output": "found and enabled"},
+    {"preset": "cmake-build", "expect_output": "ccache"},
+    "cmake-test"
+  ]
+}
