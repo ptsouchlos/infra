@@ -175,16 +175,11 @@ jobs:
         shell: bash
         run: python tests/run.py cpp-telemetry --verbose
 
-  # import std needs CMake 4.3, Ninja and a toolchain that ships the std module.
+  # import std needs CMake 4.3, Ninja and a toolchain that ships the std module. Only MSVC runs here:
+  # gcc 15 is not packaged for Ubuntu 24.04 (noble), the current ubuntu-latest.
   import-std:
-    name: cpp-import-std (${{ matrix.platform }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { platform: linux-gcc, os: ubuntu-latest, compiler: gcc, version: "15" }
-          - { platform: windows-msvc, os: windows-latest, compiler: msvc }
+    name: cpp-import-std (windows-msvc)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -192,8 +187,7 @@ jobs:
           python-version: "3.12"
       - uses: ./.github/actions/setup-cpp
         with:
-          compiler: ${{ matrix.compiler }}
-          version: ${{ matrix.version }}
+          compiler: msvc
           cmake-version: "4.3.0"
       - name: Run the demo project
         shell: bash
