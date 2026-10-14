@@ -36,6 +36,7 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-static-analyzers` | cppcheck, clang-tidy and include-what-you-use run during the build (needs all three; not run on macOS or Windows; the kind ships a `.clang-tidy` because clang-tidy refuses to run with no checks) |
 | `cpp-static-analyzers-error` | negative case: a cppcheck `uninitvar` finding fails the build when warnings are errors |
 | `cpp-telemetry` | including `telemetry` enables build instrumentation and traces land in `<build>/.trace` (needs CMake 4.3 or newer, `bash` and `jq`; older CMake makes the configure assertion fail) |
+| `cpp-import-std` | `enable_import_std` lets `import std;` build (needs CMake 4.3 or newer, Ninja and a toolchain with a std module: gcc 15+, clang 18+ with libc++, or MSVC; not run on macOS). CI covers Windows MSVC and Linux gcc 15 (on the `ubuntu-26.04` runner, since gcc 15 is not packaged for Ubuntu 24.04). On the dev host both gcc 16 and clang 22 with `--cmake-arg=-DCMAKE_CXX_FLAGS=-stdlib=libc++` pass |
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
 

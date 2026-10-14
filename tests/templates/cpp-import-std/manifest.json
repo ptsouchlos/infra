@@ -1,0 +1,17 @@
+{
+  "description": "import std builds with the experimental support enabled by enable_import_std (CMake >= 4.3, Ninja, a std-module toolchain)",
+  "skip_on": ["darwin"],
+  "requires": {"all": ["ninja"]},
+  "steps": [
+    {
+      "preset": "cmake-configure",
+      "cmd": [
+        "cmake", "-S", "@PROJECT_DIR@", "-B", "@BUILD_DIR@", "-G", "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release"
+      ],
+      "extra_args": true
+    },
+    "cmake-build",
+    {"preset": "cmake-test", "expect_output": "100% tests passed"}
+  ]
+}
