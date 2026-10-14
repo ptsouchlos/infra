@@ -32,6 +32,9 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-just` | `cpp/just/cmake.just` configure, build and test recipes (also run natively on all three OSes in CI) |
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
+
+The two `just` kinds need `just` 1.27.0 or newer (older versions reject the `[doc]` attribute); CI
+checks the floor with a `just-min` job.
 | `docs` | Doxygen builds from a plain `Doxyfile` |
 
 ## Add a kind
@@ -46,6 +49,12 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 3. Use `@INFRA_DIR@`, `@PROJECT_DIR@`, `@BUILD_DIR@`, `@PREFIX@`, `@PYTHON@`, `@PROJECT_NAME@` and
    your `vars` as `@TOKENS@` in files and steps. An unresolved token is an error.
 4. Add a test to `test_generate.py` and run the unit tests.
+
+Manifest extras: `requires` lists tools a kind needs beyond its step commands, keyed by `all`,
+`linux`, `darwin` or `windows` (for example `{"all": ["git"]}`); a missing tool exits 3 before any
+step runs. Runner options: `--timeout SECONDS` (default 1800) kills a hung step, and `--verbose`
+streams output as it is produced. `--set` values must be `KEY=VALUE`. The infra checkout path must
+not contain a single quote (just `import` strings cannot hold one).
 
 ## Action tests
 

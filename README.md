@@ -5,7 +5,7 @@ This repo is a set of re-usable components for projects of different languages. 
 
 ## C++ / CMake
 
-`cpp/cmake/` holds independent, includable CMake modules; `cpp/just/cmake.just` holds build recipes.
+`cpp/cmake/` holds independent, includable CMake modules; `cpp/just/cmake.just` holds build recipes (the `just` recipes in this repo need `just` 1.27.0 or newer, for the `[doc]` attribute).
 Vendor the repo with embd, then in your project:
 
 ```cmake

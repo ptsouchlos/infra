@@ -12,15 +12,15 @@ import json
 import platform
 import re
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 TESTS_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = TESTS_DIR / "templates"
 INFRA_DIR = TESTS_DIR.parent
 MANIFEST = "manifest.json"
-UNRESOLVED = re.compile(r"@[A-Z][A-Z0-9_]*@")
+UNRESOLVED = re.compile(r"@[A-Za-z][A-Za-z0-9_]*@")
 
 PRESETS: Dict[str, dict] = {
     "cmake-configure": {
@@ -65,6 +65,11 @@ class Kind:
     vars: Dict[str, str]
     skip_on: Tuple[str, ...]
     steps: Tuple[Step, ...]
+    requires: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+
+    def required_tools(self, system: str) -> Tuple[str, ...]:
+        """Tools needed beyond the step commands: the "all" list plus the one for this OS."""
+        return tuple(self.requires.get("all", ())) + tuple(self.requires.get(system, ()))
 
 
 @dataclass(frozen=True)
@@ -133,13 +138,19 @@ def _read_manifest(templates_dir: Path, name: str) -> Optional[dict]:
     path = templates_dir / name / MANIFEST
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
 def load_kind(name: str, templates_dir: Path = TEMPLATES_DIR) -> Kind:
     raw = None if name.startswith("_") else _read_manifest(templates_dir, name)
     if raw is None:
         raise UnknownKind(name)
+    requires = {key: tuple(tools) for key, tools in raw.get("requires", {}).items()}
+    unknown = sorted(set(requires) - {"all", "linux", "darwin", "windows"})
+    if unknown:
+        raise GenerateError(
+            "manifest for %s has unknown requires key(s): %s" % (name, ", ".join(unknown))
+        )
     try:
         return Kind(
             name=name,
@@ -148,6 +159,7 @@ def load_kind(name: str, templates_dir: Path = TEMPLATES_DIR) -> Kind:
             vars=dict(raw.get("vars", {})),
             skip_on=tuple(raw.get("skip_on", ())),
             steps=tuple(_parse_step(spec) for spec in raw["steps"]),
+            requires=requires,
         )
     except KeyError as error:
         raise GenerateError(
@@ -185,7 +197,7 @@ def _chain(templates_dir: Path, name: str, stack: Tuple[str, ...] = ()) -> List[
 
 def _copy_template(source: Path, destination: Path, project: Project) -> None:
     for path in sorted(source.rglob("*")):
-        if path.is_dir() or path.name == MANIFEST:
+        if path.is_dir() or path == source / MANIFEST:
             continue
         target = destination / path.relative_to(source)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -212,6 +224,11 @@ def generate(
             "unknown variable(s) %s for kind %s (known: %s)"
             % (", ".join(unknown), kind_name, ", ".join(sorted(kind.vars)) or "none")
         )
+    if "'" in Path(infra_dir).resolve().as_posix():
+        raise GenerateError(
+            "infra path %r contains a single quote, which just import strings cannot hold"
+            % Path(infra_dir).resolve().as_posix()
+        )
     out = Path(out_dir).resolve()
     if out.exists() and any(out.iterdir()) and not force:
         raise GenerateError("%s is not empty (use --force)" % out)
@@ -232,6 +249,16 @@ def generate(
     return project
 
 
+def parse_overrides(items: Sequence[str]) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    for item in items:
+        key, separator, value = item.partition("=")
+        if not separator or not key:
+            raise GenerateError("--set expects KEY=VALUE, got %r" % item)
+        result[key] = value
+    return result
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -250,7 +277,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.kind or not args.out_dir:
         parser.error("kind and out_dir are required")
     try:
-        overrides = dict(item.split("=", 1) for item in args.overrides)
+        overrides = parse_overrides(args.overrides)
         project = generate(
             args.kind, args.out_dir, infra_dir=args.infra, overrides=overrides, force=args.force
         )

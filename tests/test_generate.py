@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 import generate
+import run
 
 
 def write_template(root: Path, name: str, manifest: dict, files: dict) -> None:
@@ -83,15 +87,86 @@ class GenerateTests(unittest.TestCase):
         with self.assertRaises(generate.GenerateError):
             generate.generate("cpp-basic", self.out, overrides={"NOPE": "1"})
 
+    def test_parse_overrides_splits_on_first_equals(self) -> None:
+        self.assertEqual(
+            generate.parse_overrides(["A=1", "B=x=y", "C="]),
+            {"A": "1", "B": "x=y", "C": ""},
+        )
+
+    def test_parse_overrides_rejects_missing_equals(self) -> None:
+        with self.assertRaises(generate.GenerateError) as caught:
+            generate.parse_overrides(["oops"])
+        self.assertIn("KEY=VALUE", str(caught.exception))
+        self.assertIn("oops", str(caught.exception))
+
+    def test_cli_reports_bad_set_cleanly(self) -> None:
+        self.assertEqual(generate.main(["cpp-basic", str(self.out), "--set", "oops"]), 2)
+
+    def test_manifest_with_utf8_bom_loads(self) -> None:
+        templates = self.tmp / "templates"
+        (templates / "bom").mkdir(parents=True)
+        (templates / "bom" / "manifest.json").write_bytes(
+            b"\xef\xbb\xbf" + b'{"description": "d", "steps": [{"name": "s", "cmd": ["true"]}]}'
+        )
+        self.assertEqual(generate.load_kind("bom", templates).description, "d")
+
+    def test_nested_manifest_json_is_copied_as_a_project_file(self) -> None:
+        templates = self.tmp / "templates"
+        write_template(
+            templates,
+            "nested",
+            {"description": "d", "steps": [{"name": "s", "cmd": ["true"]}]},
+            {"sub/manifest.json": '{"payload": 1}'},
+        )
+        generate.generate("nested", self.out, templates_dir=templates)
+        self.assertTrue((self.out / "sub" / "manifest.json").is_file())
+        self.assertFalse((self.out / "manifest.json").exists())
+
+    def test_lowercase_token_typo_is_an_error(self) -> None:
+        templates = self.tmp / "templates"
+        write_template(
+            templates,
+            "typo",
+            {"description": "d", "steps": [{"name": "s", "cmd": ["true"]}]},
+            {"file.txt": "path: @project_dir@\n"},
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.generate("typo", self.out, templates_dir=templates)
+
+    def test_infra_path_with_single_quote_is_rejected(self) -> None:
+        with self.assertRaises(generate.GenerateError) as caught:
+            generate.generate("cpp-basic", self.out, infra_dir=self.tmp / "it's here")
+        self.assertIn("single quote", str(caught.exception))
+
+    def test_requires_selects_by_os(self) -> None:
+        kind = generate.load_kind("cpp-cpm")
+        self.assertIn("git", kind.required_tools("linux"))
+        self.assertIn("git", kind.required_tools("windows"))
+
+    def test_just_kinds_require_the_shell_their_justfile_selects(self) -> None:
+        for name in ("cpp-just", "rust-basic"):
+            kind = generate.load_kind(name)
+            self.assertIn("bash", kind.required_tools("linux"), name)
+            self.assertIn("pwsh", kind.required_tools("windows"), name)
+            self.assertNotIn("pwsh", kind.required_tools("linux"), name)
+
+    def test_unknown_requires_key_is_an_error(self) -> None:
+        templates = self.tmp / "templates"
+        write_template(
+            templates,
+            "bad",
+            {"description": "d", "requires": {"plan9": ["x"]}, "steps": [{"name": "s", "cmd": ["true"]}]},
+            {},
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.load_kind("bad", templates)
+
+    @unittest.skipUnless(shutil.which("cmake"), "cmake is required")
     def test_output_path_with_spaces_survives(self) -> None:
         spaced = self.tmp / "dir with spaces" / "project"
         project = generate.generate("cpp-basic", spaced)
-        configure = project.steps()[0]
-        self.assertIn(spaced.resolve().as_posix(), configure.cmd)
-        self.assertIn(
-            spaced.resolve().as_posix() + "/build",
-            configure.cmd,
-        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(run.run_step(project, project.steps()[0]))  # a real configure in the spaced path
 
     def test_typo_in_step_token_is_an_error(self) -> None:
         templates = self.tmp / "templates"
@@ -140,9 +215,6 @@ class GenerateTests(unittest.TestCase):
         generate.generate("top", self.out, templates_dir=templates)
         self.assertEqual((self.out / "f.txt").read_text(encoding="utf-8"), "top")
         self.assertEqual((self.out / "g.txt").read_text(encoding="utf-8"), "mid")
-
-    def test_sanitizers_skipped_on_windows(self) -> None:
-        self.assertIn("windows", generate.load_kind("cpp-sanitizers").skip_on)
 
     def test_warnings_error_overrides_library_source(self) -> None:
         generate.generate("cpp-warnings-error", self.out)

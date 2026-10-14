@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -91,6 +94,43 @@ class RunStepTests(unittest.TestCase):
         self.assertTrue(run.run_step(project, step))
 
 
+class RunStepRobustnessTests(unittest.TestCase):
+    def test_step_timeout_kills_and_fails(self) -> None:
+        project = project_with(py("import time; time.sleep(30)"))
+        started = time.monotonic()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            ok = run.run_step(project, project.kind.steps[0], timeout=1)
+        self.assertFalse(ok)
+        self.assertLess(time.monotonic() - started, 15)
+        self.assertIn("timed out", out.getvalue())
+
+    @unittest.skipIf(sys.platform == "win32", "needs a non-executable file")
+    def test_unexecutable_command_fails_cleanly(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        script = Path(tmp.name) / "not-executable"
+        script.write_text("echo hi\n", encoding="utf-8")
+        script.chmod(0o644)
+        step = generate.Step(name="bad", cmd=(str(script),))
+        project = project_with(step)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertFalse(run.run_step(project, step))
+        self.assertIn("cannot run", out.getvalue())
+
+    @unittest.skipIf(sys.platform == "win32", "uses POSIX permission bits")
+    def test_force_rmtree_removes_read_only_entries(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "tree"
+        sub = root / "sub"
+        sub.mkdir(parents=True)
+        (sub / "file").write_text("x", encoding="utf-8")
+        (sub / "file").chmod(0o444)
+        sub.chmod(0o555)
+        run.force_rmtree(root)
+        self.assertFalse(root.exists())
+
+
 class RunProjectTests(unittest.TestCase):
     def test_stops_at_first_failure(self) -> None:
         marker = tempfile.NamedTemporaryFile(delete=False)
@@ -117,27 +157,52 @@ class MissingToolsTests(unittest.TestCase):
         self.assertEqual(run.missing_tools(project), ["definitely-not-a-real-binary-xyz"])
 
 
+class RequiresTests(unittest.TestCase):
+    def test_missing_tools_includes_requires_for_this_os_only(self) -> None:
+        project = project_with(py("pass"))
+        kind = generate.Kind(
+            name="t", description="t", includes=(), vars={}, skip_on=(),
+            steps=project.kind.steps,
+            requires={"all": ("definitely-not-a-real-binary-xyz",), "windows": ("also-not-real-abc",)},
+        )
+        project = generate.Project(kind=kind, dir=project.dir, tokens=project.tokens)
+        self.assertEqual(run.missing_tools(project, "linux"), ["definitely-not-a-real-binary-xyz"])
+        self.assertEqual(
+            run.missing_tools(project, "windows"),
+            ["also-not-real-abc", "definitely-not-a-real-binary-xyz"],
+        )
+
+
 class MainTests(unittest.TestCase):
     def test_unknown_kind_exits_2(self) -> None:
         self.assertEqual(run.main(["nope"]), 2)
 
-    def test_skipped_kind_exits_0(self) -> None:
-        original = generate.current_os
+    def test_bad_set_is_a_usage_error_with_a_clear_message(self) -> None:
+        with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()) as err:
+            run.main(["cpp-basic", "--set", "oops"])
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("KEY=VALUE", err.getvalue())
+        self.assertIn("oops", err.getvalue())
+
+    def test_skipped_kind_never_generates_a_project(self) -> None:
+        def boom(*args, **kwargs):
+            raise AssertionError("generate() must not run for a skipped kind")
+
+        self.assertIn("windows", generate.load_kind("cpp-sanitizers").skip_on)
+        original_os, original_generate = generate.current_os, generate.generate
         generate.current_os = lambda: "windows"  # type: ignore[assignment]
+        generate.generate = boom  # type: ignore[assignment]
         try:
-            skipped = [
-                name for name in generate.list_kinds()
-                if "windows" in generate.load_kind(name).skip_on
-            ]
-            for name in skipped:
-                self.assertEqual(run.main([name]), 0)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(run.main(["cpp-sanitizers"]), 0)
         finally:
-            generate.current_os = original  # type: ignore[assignment]
+            generate.current_os, generate.generate = original_os, original_generate  # type: ignore[assignment]
+        self.assertIn("SKIP cpp-sanitizers", out.getvalue())
 
 
 class RunKindTests(unittest.TestCase):
     def _args(self) -> argparse.Namespace:
-        return argparse.Namespace(work_dir=None, keep=False, cmake_arg=[], verbose=False)
+        return argparse.Namespace(work_dir=None, keep=False, cmake_arg=[], verbose=False, timeout=None)
 
     def test_broken_step_token_exits_2_and_cleans_up(self) -> None:
         bad = generate.Step(name="bad", cmd=("echo", "@BULID_DIR@"))
