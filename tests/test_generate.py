@@ -280,6 +280,34 @@ class GenerateTests(unittest.TestCase):
         self.assertEqual([s.name for s in project.steps()], ["doxygen", "index exists"])
         self.assertTrue((self.out / "Doxyfile").is_file())
 
+    def _cmake_text(self, kind: str, **overrides: str) -> str:
+        generate.generate(kind, self.out, overrides=overrides or None)
+        return (self.out / "CMakeLists.txt").read_text(encoding="utf-8")
+
+    def test_cache_kind_enables_ccache_before_any_target(self) -> None:
+        kind = generate.load_kind("cpp-cache")
+        self.assertEqual(kind.skip_on, ("windows",))
+        self.assertEqual(kind.required_tools("linux"), ("ccache",))
+        text = self._cmake_text("cpp-cache")
+        self.assertLess(text.index("pt_enable_cache()"), text.index("add_library(core"))
+
+    def test_linker_kind_passes_the_linker_option_to_configure(self) -> None:
+        kind = generate.load_kind("cpp-linker")
+        self.assertEqual(kind.vars, {"LINKER": "DEFAULT", "LINK_FLAG": ""})
+        project = generate.generate("cpp-linker", self.out, overrides={"LINKER": "LLD"})
+        self.assertIn("-DPT_USER_LINKER_OPTION=LLD", project.steps()[0].cmd)
+        text = (self.out / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertLess(text.index("add_executable(check"), text.index("pt_configure_linker(check)"))
+
+    def test_linker_kind_with_no_flag_expects_empty_output(self) -> None:
+        project = generate.generate("cpp-linker", self.out)
+        self.assertEqual(project.steps()[1].expect_output, "")
+
+    def test_ipo_kind_enables_ipo_before_any_target(self) -> None:
+        self.assertEqual(generate.load_kind("cpp-ipo").vars, {"IPO_FLAG": "-flto"})
+        text = self._cmake_text("cpp-ipo")
+        self.assertLess(text.index("pt_enable_ipo()"), text.index("add_library(core"))
+
 
     def _bad_templates(self, manifests: dict) -> Path:
         templates = self.tmp / "templates"

@@ -1,0 +1,17 @@
+{
+  "description": "pt_configure_linker selects the linker (--set LINKER=LLD --set LINK_FLAG=-fuse-ld=lld)",
+  "includes": ["_cpp_common"],
+  "vars": {"LINKER": "DEFAULT", "LINK_FLAG": ""},
+  "steps": [
+    {
+      "preset": "cmake-configure",
+      "cmd": [
+        "cmake", "-S", "@PROJECT_DIR@", "-B", "@BUILD_DIR@",
+        "-DCMAKE_BUILD_TYPE=Release", "-DPT_USER_LINKER_OPTION=@LINKER@"
+      ],
+      "extra_args": true
+    },
+    {"preset": "cmake-build", "expect_output": "@LINK_FLAG@"},
+    "cmake-test"
+  ]
+}

@@ -108,6 +108,36 @@ jobs:
           python tests/run.py cpp-just
           python tests/run.py rust-basic
 
+  # Module kinds that need no compiler setup; each entry picks its tools and arguments.
+  modules:
+    name: ${{ matrix.kind }} (${{ matrix.os }}${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { kind: cpp-cache, os: ubuntu-latest, label: "", install: "sudo apt-get install -y ccache" }
+          - { kind: cpp-cache, os: macos-latest, label: "", install: "brew install ccache" }
+          - { kind: cpp-linker, os: ubuntu-latest, label: " lld", install: "sudo apt-get install -y lld", args: "--set LINKER=LLD --set LINK_FLAG=-fuse-ld=lld" }
+          - { kind: cpp-linker, os: ubuntu-latest, label: " default", args: "" }
+          - { kind: cpp-linker, os: macos-latest, label: "", args: "" }
+          - { kind: cpp-linker, os: windows-latest, label: "", args: "" }
+          - { kind: cpp-ipo, os: ubuntu-latest, label: "", args: "" }
+          - { kind: cpp-ipo, os: macos-latest, label: "", args: "" }
+          - { kind: cpp-ipo, os: windows-latest, label: "", args: "--set IPO_FLAG=" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        if: matrix.install != ''
+        shell: bash
+        run: ${{ matrix.install }}
+      - name: Run the demo project
+        shell: bash
+        run: python tests/run.py ${{ matrix.kind }} ${{ matrix.args }} --verbose
+
   rust:
     name: rust-basic (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
