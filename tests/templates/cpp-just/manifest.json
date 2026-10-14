@@ -1,6 +1,7 @@
 {
   "description": "cpp-basic built through infra's cmake.just recipes (configure, build, test)",
   "includes": ["cpp-basic"],
+  "requires": {"linux": ["bash"], "darwin": ["bash"], "windows": ["pwsh"]},
   "steps": [
     {"name": "just configure", "cmd": ["just", "configure"]},
     {"name": "just build", "cmd": ["just", "build"]},

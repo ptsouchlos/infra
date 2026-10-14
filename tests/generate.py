@@ -12,7 +12,7 @@ import json
 import platform
 import re
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -65,6 +65,11 @@ class Kind:
     vars: Dict[str, str]
     skip_on: Tuple[str, ...]
     steps: Tuple[Step, ...]
+    requires: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
+
+    def required_tools(self, system: str) -> Tuple[str, ...]:
+        """Tools needed beyond the step commands: the "all" list plus the one for this OS."""
+        return tuple(self.requires.get("all", ())) + tuple(self.requires.get(system, ()))
 
 
 @dataclass(frozen=True)
@@ -140,6 +145,12 @@ def load_kind(name: str, templates_dir: Path = TEMPLATES_DIR) -> Kind:
     raw = None if name.startswith("_") else _read_manifest(templates_dir, name)
     if raw is None:
         raise UnknownKind(name)
+    requires = {key: tuple(tools) for key, tools in raw.get("requires", {}).items()}
+    unknown = sorted(set(requires) - {"all", "linux", "darwin", "windows"})
+    if unknown:
+        raise GenerateError(
+            "manifest for %s has unknown requires key(s): %s" % (name, ", ".join(unknown))
+        )
     try:
         return Kind(
             name=name,
@@ -148,6 +159,7 @@ def load_kind(name: str, templates_dir: Path = TEMPLATES_DIR) -> Kind:
             vars=dict(raw.get("vars", {})),
             skip_on=tuple(raw.get("skip_on", ())),
             steps=tuple(_parse_step(spec) for spec in raw["steps"]),
+            requires=requires,
         )
     except KeyError as error:
         raise GenerateError(

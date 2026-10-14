@@ -134,6 +134,29 @@ class GenerateTests(unittest.TestCase):
             generate.generate("cpp-basic", self.out, infra_dir=self.tmp / "it's here")
         self.assertIn("single quote", str(caught.exception))
 
+    def test_requires_selects_by_os(self) -> None:
+        kind = generate.load_kind("cpp-cpm")
+        self.assertIn("git", kind.required_tools("linux"))
+        self.assertIn("git", kind.required_tools("windows"))
+
+    def test_just_kinds_require_the_shell_their_justfile_selects(self) -> None:
+        for name in ("cpp-just", "rust-basic"):
+            kind = generate.load_kind(name)
+            self.assertIn("bash", kind.required_tools("linux"), name)
+            self.assertIn("pwsh", kind.required_tools("windows"), name)
+            self.assertNotIn("pwsh", kind.required_tools("linux"), name)
+
+    def test_unknown_requires_key_is_an_error(self) -> None:
+        templates = self.tmp / "templates"
+        write_template(
+            templates,
+            "bad",
+            {"description": "d", "requires": {"plan9": ["x"]}, "steps": [{"name": "s", "cmd": ["true"]}]},
+            {},
+        )
+        with self.assertRaises(generate.GenerateError):
+            generate.load_kind("bad", templates)
+
     def test_output_path_with_spaces_survives(self) -> None:
         spaced = self.tmp / "dir with spaces" / "project"
         project = generate.generate("cpp-basic", spaced)

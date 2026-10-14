@@ -1,4 +1,5 @@
 {
   "description": "cpm bootstrap downloads and builds a pinned dependency (needs network)",
+  "requires": {"all": ["git"]},
   "steps": ["cmake-configure", "cmake-build", "cmake-test"]
 }

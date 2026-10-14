@@ -126,10 +126,11 @@ def force_rmtree(path) -> None:
         shutil.rmtree(path, onerror=_make_writable_and_retry)
 
 
-def missing_tools(project: generate.Project) -> List[str]:
+def missing_tools(project: generate.Project, system: Optional[str] = None) -> List[str]:
     missing = set()
-    for step in project.steps():
-        tool = step.cmd[0]
+    tools = [step.cmd[0] for step in project.steps()]
+    tools.extend(project.kind.required_tools(system or generate.current_os()))
+    for tool in tools:
         if shutil.which(tool) is None and not Path(tool).exists():
             missing.add(tool)
     return sorted(missing)

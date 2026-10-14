@@ -157,6 +157,22 @@ class MissingToolsTests(unittest.TestCase):
         self.assertEqual(run.missing_tools(project), ["definitely-not-a-real-binary-xyz"])
 
 
+class RequiresTests(unittest.TestCase):
+    def test_missing_tools_includes_requires_for_this_os_only(self) -> None:
+        project = project_with(py("pass"))
+        kind = generate.Kind(
+            name="t", description="t", includes=(), vars={}, skip_on=(),
+            steps=project.kind.steps,
+            requires={"all": ("definitely-not-a-real-binary-xyz",), "windows": ("also-not-real-abc",)},
+        )
+        project = generate.Project(kind=kind, dir=project.dir, tokens=project.tokens)
+        self.assertEqual(run.missing_tools(project, "linux"), ["definitely-not-a-real-binary-xyz"])
+        self.assertEqual(
+            run.missing_tools(project, "windows"),
+            ["also-not-real-abc", "definitely-not-a-real-binary-xyz"],
+        )
+
+
 class MainTests(unittest.TestCase):
     def test_unknown_kind_exits_2(self) -> None:
         self.assertEqual(run.main(["nope"]), 2)
