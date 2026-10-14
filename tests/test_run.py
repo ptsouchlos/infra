@@ -184,18 +184,20 @@ class MainTests(unittest.TestCase):
         self.assertIn("KEY=VALUE", err.getvalue())
         self.assertIn("oops", err.getvalue())
 
-    def test_skipped_kind_exits_0(self) -> None:
-        original = generate.current_os
+    def test_skipped_kind_never_generates_a_project(self) -> None:
+        def boom(*args, **kwargs):
+            raise AssertionError("generate() must not run for a skipped kind")
+
+        self.assertIn("windows", generate.load_kind("cpp-sanitizers").skip_on)
+        original_os, original_generate = generate.current_os, generate.generate
         generate.current_os = lambda: "windows"  # type: ignore[assignment]
+        generate.generate = boom  # type: ignore[assignment]
         try:
-            skipped = [
-                name for name in generate.list_kinds()
-                if "windows" in generate.load_kind(name).skip_on
-            ]
-            for name in skipped:
-                self.assertEqual(run.main([name]), 0)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(run.main(["cpp-sanitizers"]), 0)
         finally:
-            generate.current_os = original  # type: ignore[assignment]
+            generate.current_os, generate.generate = original_os, original_generate  # type: ignore[assignment]
+        self.assertIn("SKIP cpp-sanitizers", out.getvalue())
 
 
 class RunKindTests(unittest.TestCase):

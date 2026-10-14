@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 import generate
+import run
 
 
 def write_template(root: Path, name: str, manifest: dict, files: dict) -> None:
@@ -157,15 +161,12 @@ class GenerateTests(unittest.TestCase):
         with self.assertRaises(generate.GenerateError):
             generate.load_kind("bad", templates)
 
+    @unittest.skipUnless(shutil.which("cmake"), "cmake is required")
     def test_output_path_with_spaces_survives(self) -> None:
         spaced = self.tmp / "dir with spaces" / "project"
         project = generate.generate("cpp-basic", spaced)
-        configure = project.steps()[0]
-        self.assertIn(spaced.resolve().as_posix(), configure.cmd)
-        self.assertIn(
-            spaced.resolve().as_posix() + "/build",
-            configure.cmd,
-        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(run.run_step(project, project.steps()[0]))  # a real configure in the spaced path
 
     def test_typo_in_step_token_is_an_error(self) -> None:
         templates = self.tmp / "templates"
@@ -214,9 +215,6 @@ class GenerateTests(unittest.TestCase):
         generate.generate("top", self.out, templates_dir=templates)
         self.assertEqual((self.out / "f.txt").read_text(encoding="utf-8"), "top")
         self.assertEqual((self.out / "g.txt").read_text(encoding="utf-8"), "mid")
-
-    def test_sanitizers_skipped_on_windows(self) -> None:
-        self.assertIn("windows", generate.load_kind("cpp-sanitizers").skip_on)
 
     def test_warnings_error_overrides_library_source(self) -> None:
         generate.generate("cpp-warnings-error", self.out)

@@ -50,6 +50,12 @@ checks the floor with a `just-min` job.
    your `vars` as `@TOKENS@` in files and steps. An unresolved token is an error.
 4. Add a test to `test_generate.py` and run the unit tests.
 
+Manifest extras: `requires` lists tools a kind needs beyond its step commands, keyed by `all`,
+`linux`, `darwin` or `windows` (for example `{"all": ["git"]}`); a missing tool exits 3 before any
+step runs. Runner options: `--timeout SECONDS` (default 1800) kills a hung step, and `--verbose`
+streams output as it is produced. `--set` values must be `KEY=VALUE`. The infra checkout path must
+not contain a single quote (just `import` strings cannot hold one).
+
 ## Action tests
 
 `test_actions.py` checks the composite actions in `.github/actions/`: structure rules (shell on every
