@@ -122,6 +122,9 @@ jobs:
           - { kind: cpp-linker, os: ubuntu-latest, label: " default", args: "" }
           - { kind: cpp-linker, os: macos-latest, label: "", args: "" }
           - { kind: cpp-linker, os: windows-latest, label: "", args: "" }
+          - { kind: cpp-static-analyzers, os: ubuntu-latest, label: " clang", install: "sudo apt-get install -y cppcheck clang-tidy iwyu", args: "--cmake-arg=-DCMAKE_CXX_COMPILER=clang++" }
+          - { kind: cpp-static-analyzers, os: ubuntu-latest, label: " gcc", install: "sudo apt-get install -y cppcheck clang-tidy iwyu", args: "--cmake-arg=-DCMAKE_CXX_COMPILER=g++" }
+          - { kind: cpp-static-analyzers-error, os: ubuntu-latest, label: "", install: "sudo apt-get install -y cppcheck", args: "" }
           - { kind: cpp-ipo, os: ubuntu-latest, label: "", args: "" }
           - { kind: cpp-ipo, os: macos-latest, label: "", args: "" }
           - { kind: cpp-ipo, os: windows-latest, label: "", args: "--set IPO_FLAG=" }

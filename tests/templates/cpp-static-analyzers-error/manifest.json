@@ -1,0 +1,10 @@
+{
+  "description": "Negative: cppcheck findings fail the build when warnings are errors",
+  "includes": ["_cpp_common"],
+  "skip_on": ["windows", "darwin"],
+  "requires": {"all": ["cppcheck"]},
+  "steps": [
+    "cmake-configure",
+    {"preset": "cmake-build", "expect": "fail", "expect_output": "uninitvar"}
+  ]
+}
