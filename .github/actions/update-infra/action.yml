@@ -1,0 +1,38 @@
+name: Update infra
+description: Open or update a PR that moves this repo's infra embeds and action refs to an infra release.
+inputs:
+  tag:
+    description: Infra release tag (for example v1.3.0). Empty uses the latest non-prerelease release.
+    default: ""
+  token:
+    description: Token that can push a branch and open a PR, and whose pushes trigger CI (a GitHub App token).
+    required: true
+  branch:
+    description: Branch the PR is opened from.
+    default: infra/update
+runs:
+  using: composite
+  steps:
+    - name: Install embd
+      uses: ptsouchlos/embd@v0
+      with:
+        args: --version
+    - name: Let git reach infra over HTTPS
+      shell: bash
+      run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+    - name: Update embeds and action refs
+      id: update
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "${{ github.action_path }}/update.sh"
+    - name: Open or update the PR
+      if: steps.update.outputs.changed == 'true'
+      uses: peter-evans/create-pull-request@v7
+      with:
+        token: ${{ inputs.token }}
+        branch: ${{ inputs.branch }}
+        commit-message: ${{ steps.update.outputs.title }}
+        title: ${{ steps.update.outputs.title }}
+        body: ${{ steps.update.outputs.body }}

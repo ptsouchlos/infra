@@ -63,6 +63,7 @@ See [tests/README.md](tests/README.md).
 | `setup-rust` | `toolchain`, `components`, `just` | rustup toolchain, cargo cache, optional `just` |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test` | `cargo fmt --check`, clippy, test |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
+| `update-infra` | `tag`, `token`, `branch` | moves the repo's infra embeds (and `@vN` action refs on a major) to a release, then opens or updates a PR |
 
 ```yaml
 jobs:
@@ -89,6 +90,45 @@ Notes:
 - With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
 - Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).
 - `build-docs` with `publish: true` needs `permissions: { pages: write, id-token: write }` and the `github-pages` environment.
+
+### Keeping a consumer up to date
+
+`update-infra` needs a GitHub App token (not `GITHUB_TOKEN`, whose PRs do not trigger CI). Add this
+caller to the consumer as `.github/workflows/infra-update.yml`:
+
+```yaml
+name: Update infra
+on:
+  repository_dispatch: { types: [infra-release] }
+  schedule: [{ cron: "0 6 * * 1" }]
+  workflow_dispatch:
+concurrency: infra-update
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.INFRA_BOT_APP_ID }}
+          private-key: ${{ secrets.INFRA_BOT_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with: { token: "${{ steps.app.outputs.token }}" }
+      - uses: ptsouchlos/infra/.github/actions/update-infra@v1
+        with:
+          token: ${{ steps.app.outputs.token }}
+          tag: ${{ github.event.client_payload.tag }}
+```
+
+Per consumer repo, install the App on it and run:
+
+```sh
+gh repo edit R --add-topic uses-infra
+gh variable set INFRA_BOT_APP_ID -R R
+gh secret set INFRA_BOT_PRIVATE_KEY -R R < key.pem
+```
+
+A drifted vendored file makes the step fail instead of being overwritten; fix it by hand.
 
 ### Releasing
 
