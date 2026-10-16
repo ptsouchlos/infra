@@ -85,7 +85,7 @@ jobs:
 ```
 
 Notes:
-- Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc. Anything else fails fast.
+- Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc and clang. Anything else fails fast.
 - `configure-args` is split on spaces, so one argument cannot contain a space.
 - With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
 - Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).

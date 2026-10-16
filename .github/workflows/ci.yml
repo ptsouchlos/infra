@@ -37,15 +37,17 @@ jobs:
       fail-fast: false
       matrix:
         kind: [cpp-basic, cpp-hardening, cpp-sanitizers, cpp-install, cpp-cpm]
-        platform: [linux-gcc, linux-clang, macos-appleclang, windows-msvc]
+        platform: [linux-gcc, linux-clang, macos-appleclang, windows-msvc, windows-clang]
         # Each include entry names its platform, so it adds os/compiler to every kind on that platform.
         include:
           - { platform: linux-gcc, os: ubuntu-latest, compiler: gcc, version: "14" }
           - { platform: linux-clang, os: ubuntu-latest, compiler: clang, version: "18" }
           - { platform: macos-appleclang, os: macos-latest, compiler: appleclang }
           - { platform: windows-msvc, os: windows-latest, compiler: msvc }
+          - { platform: windows-clang, os: windows-latest, compiler: clang }
         exclude:
           - { kind: cpp-sanitizers, platform: windows-msvc }
+          - { kind: cpp-sanitizers, platform: windows-clang }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
