@@ -40,7 +40,7 @@ runs:
         test -f "$HTML_DIR/index.html" || { echo "::error::no $HTML_DIR/index.html after doxygen; check html-dir against the Doxyfile"; exit 1; }
     - name: Upload Pages artifact
       if: inputs.publish == 'true'
-      uses: actions/upload-pages-artifact@v3
+      uses: actions/upload-pages-artifact@v5
       with:
         path: ${{ inputs.working-directory }}/${{ inputs.html-dir }}
     - name: Deploy to Pages
