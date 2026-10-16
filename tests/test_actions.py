@@ -308,6 +308,24 @@ class UpdateInfraScript(unittest.TestCase):
         self.assertIn("+ embd update ./infra --rev v2.0.0", result.stdout)
 
 
+class UpdateInfraWorkflow(unittest.TestCase):
+    path = ROOT / ".github" / "workflows" / "update-infra.yml"
+
+    def test_is_a_reusable_workflow_that_wraps_the_action(self):
+        text = self.path.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?m)^  workflow_call:")
+        self.assertRegex(text, r"(?m)^      tag:")
+        self.assertRegex(text, r"(?m)^      INFRA_BOT_PRIVATE_KEY:")
+        self.assertIn("ptsouchlos/infra/.github/actions/update-infra@v", text)
+        self.assertIn("tag: ${{ inputs.tag }}", text)
+
+    def test_third_party_actions_are_version_pinned(self):
+        text = self.path.read_text(encoding="utf-8")
+        for ref in re.findall(r"(?m)^\s*-?\s*uses:\s*(\S+)", text):
+            with self.subTest(uses=ref):
+                self.assertRegex(ref, r"@v\d")
+
+
 def can_reach(host, port=443):
     try:
         with socket.create_connection((host, port), timeout=3):
