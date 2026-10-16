@@ -62,8 +62,10 @@ bumped=""
 if [ -d .github/workflows ]; then
   while IFS= read -r wf; do
     if grep -Eq "$repo/\.github/actions/[A-Za-z0-9_-]+@v[0-9]+" "$wf" \
-       && grep -E "$repo/\.github/actions/[A-Za-z0-9_-]+@v[0-9]+" "$wf" | grep -vq "@$major\b"; then
-      sed -E -i "s#($repo/\.github/actions/[A-Za-z0-9_-]+)@v[0-9]+#\1@$major#g" "$wf"
+       && grep -E "$repo/\.github/actions/[A-Za-z0-9_-]+@v[0-9]+" "$wf" | grep -Evq "@$major([^0-9]|$)"; then
+      # -i.bak and rm: GNU and BSD sed disagree on a bare -i.
+      sed -E -i.bak "s#($repo/\.github/actions/[A-Za-z0-9_-]+)@v[0-9]+#\1@$major#g" "$wf"
+      rm -f "$wf.bak"
       bumped+="- \`$wf\`: action refs → \`@$major\`"$'\n'
     fi
   done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' | sort)
