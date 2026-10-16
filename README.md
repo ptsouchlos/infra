@@ -93,8 +93,8 @@ Notes:
 
 ### Keeping a consumer up to date
 
-`update-infra` needs a GitHub App token (not `GITHUB_TOKEN`, whose PRs do not trigger CI). Add this
-caller to the consumer as `.github/workflows/infra-update.yml`:
+Call the reusable workflow from `.github/workflows/infra-update.yml`. The caller owns the triggers;
+the token, checkout and PR steps live in infra, so fixes reach every consumer with the next `v1`:
 
 ```yaml
 name: Update infra
@@ -105,20 +105,14 @@ on:
 concurrency: infra-update
 jobs:
   update:
-    runs-on: ubuntu-latest
-    steps:
-      - id: app
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.INFRA_BOT_APP_ID }}
-          private-key: ${{ secrets.INFRA_BOT_PRIVATE_KEY }}
-      - uses: actions/checkout@v4
-        with: { token: "${{ steps.app.outputs.token }}" }
-      - uses: ptsouchlos/infra/.github/actions/update-infra@v1
-        with:
-          token: ${{ steps.app.outputs.token }}
-          tag: ${{ github.event.client_payload.tag }}
+    uses: ptsouchlos/infra/.github/workflows/update-infra.yml@v1
+    secrets: inherit
+    with:
+      tag: ${{ github.event.client_payload.tag }}
 ```
+
+It mints a GitHub App token (not `GITHUB_TOKEN`, whose PRs do not trigger CI). To use the
+`update-infra` action directly instead, pass it a token from `actions/create-github-app-token`.
 
 Per consumer repo, install the App on it and run:
 
