@@ -41,7 +41,8 @@ class ActionStructure(unittest.TestCase):
         found = {f.parent.name for f in action_files()}
         self.assertEqual(
             found,
-            {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "build-docs"},
+            {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "build-docs",
+             "update-infra"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -174,6 +175,137 @@ class NotifyConsumersScript(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("dispatched to 1 repos, 1 failed", result.stdout)
         self.assertNotIn("me/", result.stdout + result.stderr)
+
+
+def git(cwd, *args):
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
+                   env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+
+
+def embd_file(remote, commit):
+    return (f'[metadata]\nremote = "{remote}"\ncommit_hash = "{commit}"\n'
+            'allow_untracked = false\n\n[files]\n')
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake embd/gh on PATH")
+class UpdateInfraScript(unittest.TestCase):
+    script = ACTIONS / "update-infra" / "update.sh"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        tmp = Path(self._tmp.name)
+        # A local "infra" remote with tags v1.0.0 and v2.0.0.
+        self.remote = tmp / "infra.git"
+        work = tmp / "infra-work"
+        work.mkdir()
+        git(work, "init", "-q", "-b", "main")
+        self.commits = {}
+        for tag in ("v1.0.0", "v2.0.0"):
+            (work / "f").write_text(tag)
+            git(work, "add", "f")
+            git(work, "commit", "-q", "-m", tag)
+            git(work, "tag", tag)
+            self.commits[tag] = subprocess.run(
+                ["git", "rev-parse", tag], cwd=work, capture_output=True, text=True,
+                check=True).stdout.strip()
+        git(tmp, "clone", "-q", "--bare", str(work), str(self.remote))
+        # Fake tools: embd records its calls (or fails on demand); gh reports a latest release.
+        self.bin = tmp / "bin"
+        self.bin.mkdir()
+        self.calls = tmp / "embd-calls"
+        (self.bin / "embd").write_text(
+            f'#!/usr/bin/env bash\necho "$@" >> "{self.calls}"\n'
+            '[ -z "${FAKE_EMBD_FAIL:-}" ] || { echo "local modifications" >&2; exit 1; }\n')
+        (self.bin / "gh").write_text('#!/usr/bin/env bash\necho "${FAKE_LATEST:-v1.0.0}"\n')
+        for f in self.bin.iterdir():
+            f.chmod(0o755)
+        # The consumer repo.
+        self.repo = tmp / "consumer"
+        (self.repo / "infra").mkdir(parents=True)
+        (self.repo / "other").mkdir()
+        (self.repo / ".github" / "workflows").mkdir(parents=True)
+        self.old = self.commits["v1.0.0"]
+        (self.repo / "infra" / ".embd").write_text(
+            embd_file("git@github.com:ptsouchlos/infra.git", self.old))
+        (self.repo / "other" / ".embd").write_text(
+            embd_file("git@github.com:someone/else.git", "a" * 40))
+        (self.repo / ".github" / "workflows" / "ci.yml").write_text(
+            "steps:\n  - uses: ptsouchlos/infra/.github/actions/setup-rust@v1\n"
+            "  - uses: actions/checkout@v1\n")
+        self.out = tmp / "output"
+        self.out.touch()
+
+    def run_update(self, **env):
+        base = {"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
+                "INFRA_URL": str(self.remote), "GITHUB_OUTPUT": str(self.out)}
+        full = {**os.environ, **base, **env}
+        return subprocess.run([find_bash(), str(self.script)], cwd=self.repo, env=full,
+                              capture_output=True, text=True)
+
+    def embd_calls(self):
+        return self.calls.read_text() if self.calls.exists() else ""
+
+    def workflow_path(self):
+        return self.repo / ".github" / "workflows" / "ci.yml"
+
+    def workflow(self):
+        return self.workflow_path().read_text()
+
+    def test_only_infra_embeds_are_updated(self):
+        result = self.run_update(TAG="v1.0.0", FAKE_LATEST="v1.0.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.embd_calls(), "")  # already at v1.0.0
+        result = self.run_update(TAG="v2.0.0")
+        self.assertEqual(self.embd_calls().strip(), "update ./infra --rev v2.0.0")
+
+    def test_https_remote_without_git_suffix_matches(self):
+        (self.repo / "infra" / ".embd").write_text(
+            embd_file("https://github.com/ptsouchlos/infra", self.old))
+        self.run_update(TAG="v2.0.0")
+        self.assertIn("./infra", self.embd_calls())
+
+    def test_current_embed_changes_nothing(self):
+        (self.repo / "infra" / ".embd").write_text(
+            embd_file("git@github.com:ptsouchlos/infra.git", self.commits["v2.0.0"]))
+        self.workflow_path().write_text(self.workflow().replace("@v1", "@v2"))
+        result = self.run_update(TAG="v2.0.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.embd_calls(), "")
+        self.assertIn("changed=false", self.out.read_text())
+
+    def test_minor_release_keeps_workflow_refs(self):
+        (self.repo / "infra" / ".embd").write_text(
+            embd_file("git@github.com:ptsouchlos/infra.git", "b" * 40))
+        self.run_update(TAG="v1.0.0")
+        self.assertIn("setup-rust@v1\n", self.workflow())
+        self.assertIn("changed=true", self.out.read_text())
+
+    def test_major_release_rewrites_only_infra_action_refs(self):
+        self.run_update(TAG="v2.0.0")
+        text = self.workflow()
+        self.assertIn("ptsouchlos/infra/.github/actions/setup-rust@v2", text)
+        self.assertIn("actions/checkout@v1", text)
+
+    def test_drift_fails_loudly_and_is_not_forced(self):
+        result = self.run_update(TAG="v2.0.0", FAKE_EMBD_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("--force", self.embd_calls())
+
+    def test_empty_tag_uses_the_latest_release(self):
+        self.run_update(TAG="", FAKE_LATEST="v2.0.0")
+        self.assertIn("--rev v2.0.0", self.embd_calls())
+
+    def test_non_release_tag_is_rejected(self):
+        result = self.run_update(TAG="main")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("::error::", result.stdout + result.stderr)
+
+    def test_dry_run_prints_instead_of_running_embd(self):
+        result = self.run_update(TAG="v2.0.0", DRY_RUN="1")
+        self.assertEqual(self.embd_calls(), "")
+        self.assertIn("+ embd update ./infra --rev v2.0.0", result.stdout)
 
 
 def can_reach(host, port=443):
