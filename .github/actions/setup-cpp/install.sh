@@ -21,9 +21,9 @@ run() {
 }
 
 case "$RUNNER_OS:$COMPILER" in
-    Linux:gcc | Linux:clang | macOS:appleclang | Windows:msvc) ;;
+    Linux:gcc | Linux:clang | macOS:appleclang | Windows:msvc | Windows:clang) ;;
     *)
-        echo "::error::compiler '$COMPILER' is not supported on $RUNNER_OS (Linux: gcc|clang, macOS: appleclang, Windows: msvc)"
+        echo "::error::compiler '$COMPILER' is not supported on $RUNNER_OS (Linux: gcc|clang, macOS: appleclang, Windows: msvc|clang)"
         exit 1
         ;;
 esac
@@ -58,6 +58,13 @@ case "$RUNNER_OS:$COMPILER" in
         ;;
     Windows:msvc)
         # The action's ilammy/msvc-dev-cmd step sets up the environment.
+        ;;
+    Windows:clang)
+        # LLVM ships on the runner and targets the MSVC runtime, which the msvc-dev-cmd step provides.
+        {
+            echo "CC=clang"
+            echo "CXX=clang++"
+        } >>"$GITHUB_ENV"
         ;;
 esac
 

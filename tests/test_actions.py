@@ -115,6 +115,13 @@ class SetupCppScript(unittest.TestCase):
         self.assertNotIn("apt-get", result.stdout)
         self.assertEqual(gh_env, "")
 
+    def test_windows_clang_exports_the_preinstalled_llvm(self):
+        result, gh_env = self.run_install(RUNNER_OS="Windows", COMPILER="clang")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("apt-get", result.stdout)
+        self.assertIn("CC=clang\n", gh_env)
+        self.assertIn("CXX=clang++\n", gh_env)
+
     def test_unsupported_pair_fails_before_installing(self):
         result, gh_env = self.run_install(RUNNER_OS="macOS", COMPILER="gcc")
         self.assertNotEqual(result.returncode, 0)
