@@ -131,6 +131,51 @@ class SetupCppScript(unittest.TestCase):
         self.assertNotIn("cmake==", result.stdout)
 
 
+@unittest.skipIf(sys.platform == "win32", "uses a fake gh on PATH")
+@unittest.skipUnless(shutil.which("jq"), "jq is required")
+class NotifyConsumersScript(unittest.TestCase):
+    script = ROOT / ".github" / "scripts" / "notify-consumers.sh"
+
+    def run_notify(self, listing, fail=""):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            calls = d / "calls"
+            (d / "listing").write_text(listing)
+            gh = d / "gh"
+            gh.write_text(
+                "#!/usr/bin/env bash\n"
+                'case "$*" in\n'
+                f'  *installation/repositories*) cat "{d}/listing" ;;\n'
+                '  */topics*) echo \'["uses-infra"]\' ;;\n'
+                f'  *dispatches*) echo "$*" >> "{calls}"\n'
+                f'    if [ -n "{fail}" ]; then case "$*" in *"{fail}"*) exit 1 ;; esac; fi ;;\n'
+                "esac\n")
+            gh.chmod(0o755)
+            env = {**os.environ, "PATH": f"{d}{os.pathsep}{os.environ['PATH']}",
+                   "TAG": "v1.2.0"}
+            result = subprocess.run([find_bash(), str(self.script)], env=env,
+                                    capture_output=True, text=True)
+            return result, calls.read_text() if calls.exists() else ""
+
+    def test_only_topic_repos_are_dispatched_and_names_stay_out_of_the_log(self):
+        result, calls = self.run_notify(
+            'me/a\t["uses-infra","x"]\nme/b\t["other"]\nme/c\tnull\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("repos/me/a/dispatches", calls)
+        self.assertIn("repos/me/c/dispatches", calls)  # topics fetched per repo
+        self.assertNotIn("me/b", calls)
+        self.assertIn("client_payload[tag]=v1.2.0", calls)
+        self.assertIn("dispatched to 2 repos, 0 failed", result.stdout)
+        self.assertNotIn("me/", result.stdout + result.stderr)
+
+    def test_a_failed_dispatch_fails_the_job_without_naming_the_repo(self):
+        result, _ = self.run_notify('me/a\t["uses-infra"]\nme/b\t["uses-infra"]\n',
+                                    fail="me/b")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("dispatched to 1 repos, 1 failed", result.stdout)
+        self.assertNotIn("me/", result.stdout + result.stderr)
+
+
 def can_reach(host, port=443):
     try:
         with socket.create_connection((host, port), timeout=3):
