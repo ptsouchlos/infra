@@ -203,12 +203,16 @@ jobs:
         run: python tests/run.py cpp-import-std --verbose
 
   rust:
-    name: rust-basic (${{ matrix.os }})
+    name: rust-basic (${{ matrix.os }}, ${{ matrix.toolchain }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        toolchain: [stable]
+        include:
+          - { os: ubuntu-latest, toolchain: beta }
+          - { os: ubuntu-latest, toolchain: "1.85" }   # oldest probed: first edition-2024 compiler
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -218,6 +222,7 @@ jobs:
         run: python tests/generate.py rust-basic _demo/rust-basic
       - uses: ./.github/actions/setup-rust
         with:
+          toolchain: ${{ matrix.toolchain }}
           just: "true"
       - uses: ./.github/actions/cargo-check
         with:
