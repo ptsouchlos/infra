@@ -6,8 +6,10 @@ import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -42,7 +44,7 @@ class ActionStructure(unittest.TestCase):
         self.assertEqual(
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "build-docs",
-             "update-infra"},
+             "update-infra", "cargo-release"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -556,6 +558,151 @@ class CargoCheckRealScript(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             for group in ("fmt", "clippy", "test"):
                 self.assertIn(f"::group::{group}", result.stdout)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
+class CargoReleaseScript(unittest.TestCase):
+    script = ACTIONS / "cargo-release" / "package.sh"
+    linux = "x86_64-unknown-linux-musl"
+    windows = "x86_64-pc-windows-msvc"
+
+    def run_release(self, binary=True, crate="crate", target_dir=None, **env):
+        """Run package.sh against a fake cargo; returns (result, cargo calls, out dir)."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            calls = d / "calls"
+            bindir = d / "bin"
+            bindir.mkdir()
+            cargo = bindir / "cargo"
+            cargo.write_text(f'#!/usr/bin/env bash\necho "$*" >> "{calls}"\n')
+            cargo.chmod(0o755)
+            target = env["TARGET"]
+            crate_dir = d / crate
+            release = Path(target_dir or crate_dir / "target") / target / "release"
+            if binary:
+                release.mkdir(parents=True)
+                exe = ".exe" if "windows" in target else ""
+                (release / (env["BIN"] + exe)).write_text("binary")
+            out = d / "dist"
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            full = {"PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
+                    "WORKING_DIRECTORY": str(crate_dir), "OUT_DIR": str(out),
+                    "GITHUB_OUTPUT": str(gh_output), "ARCHIVE": "auto", "NAME": "",
+                    "CARGO_ARGS": "", **env}
+            if target_dir:
+                full["CARGO_TARGET_DIR"] = str(target_dir)
+            crate_dir.mkdir(exist_ok=True)
+            result = run_script(self.script, full)
+            lines = calls.read_text().splitlines() if calls.exists() else []
+            # Read everything the tests need before the temp dir goes away.
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            self.tar_names = None
+            self.zip_names = None
+            tar = out / f"tool-{target}.tar.gz"
+            if tar.exists():
+                with tarfile.open(tar) as t:
+                    self.tar_names = t.getnames()
+            self.checksum = None
+            self.checksum_ok = None
+            for sha in out.glob("*.sha256") if out.exists() else []:
+                self.checksum = sha.read_text()
+                tool = shutil.which("sha256sum")
+                if tool:
+                    self.checksum_ok = subprocess.run(
+                        [tool, "-c", sha.name], cwd=out, capture_output=True).returncode == 0
+            zipped = out / f"tool-{target}.zip"
+            if zipped.exists():
+                with zipfile.ZipFile(zipped) as z:
+                    self.zip_names = z.namelist()
+            return result, lines, out
+
+    def test_build_command_and_default_tar_asset(self):
+        r, calls, _ = self.run_release(TARGET=self.linux, BIN="tool")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(calls, [f"build --release --target {self.linux}"])
+        self.assertIn(f"tool-{self.linux}.tar.gz", self.out_files)
+
+    def test_tar_archive_holds_only_the_binary_at_the_root(self):
+        self.run_release(TARGET=self.linux, BIN="tool")
+        self.assertEqual(self.tar_names, ["tool"])
+
+    def test_checksum_names_the_bare_file(self):
+        self.run_release(TARGET=self.linux, BIN="tool")
+        self.assertRegex(self.checksum, rf"^[0-9a-f]{{64}}  tool-{self.linux}\.tar\.gz\n$")
+        if self.checksum_ok is not None:
+            self.assertTrue(self.checksum_ok)
+
+    def test_windows_target_packages_the_exe(self):
+        name = f"tool-1.2.3-{self.windows}"
+        r, _, _ = self.run_release(TARGET=self.windows, BIN="tool", ARCHIVE="none", NAME=name)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f"{name}.exe", self.out_files)
+        self.assertIn(f"{name}.exe.sha256", self.out_files)
+
+    @unittest.skipUnless(shutil.which("7z"), "7z is required")
+    def test_zip_archive_holds_only_the_exe(self):
+        r, _, _ = self.run_release(TARGET=self.windows, BIN="tool")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.zip_names, ["tool.exe"])
+
+    def test_cargo_args_are_forwarded(self):
+        _, calls, _ = self.run_release(TARGET=self.linux, BIN="tool",
+                                       CARGO_ARGS="--locked --features=a,b")
+        self.assertEqual(calls, [f"build --release --target {self.linux} --locked --features=a,b"])
+
+    def test_cargo_target_dir_is_respected(self):
+        with tempfile.TemporaryDirectory() as shared:
+            r, _, _ = self.run_release(TARGET=self.linux, BIN="tool",
+                                       target_dir=Path(shared) / "shared-target")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_working_directory_with_spaces(self):
+        r, _, _ = self.run_release(TARGET=self.linux, BIN="tool", crate="my crate")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_missing_binary_fails_with_the_expected_path(self):
+        r, _, _ = self.run_release(binary=False, TARGET=self.linux, BIN="tool")
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stdout + r.stderr
+        self.assertIn("::error::", out)
+        self.assertIn(f"target/{self.linux}/release/tool", out)
+
+    def test_outputs_are_written(self):
+        self.run_release(TARGET=self.linux, BIN="tool")
+        self.assertRegex(self.gh_output, r"(?m)^asset=.*\.tar\.gz$")
+        self.assertRegex(self.gh_output, r"(?m)^checksum=.*\.tar\.gz\.sha256$")
+
+
+@unittest.skipUnless(shutil.which("cargo") and shutil.which("rustc"), "cargo is required")
+class CargoReleaseRealScript(unittest.TestCase):
+    script = ACTIONS / "cargo-release" / "package.sh"
+
+    def test_builds_and_packages_rust_basic(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            src = d / "my project"
+            subprocess.run(
+                [sys.executable, str(ROOT / "tests" / "generate.py"), "rust-basic", str(src),
+                 "--infra", str(ROOT)],
+                check=True, capture_output=True, text=True)
+            name = re.search(r'(?m)^name\s*=\s*"([^"]+)"',
+                             (src / "Cargo.toml").read_text()).group(1)
+            host = re.search(r"(?m)^host:\s*(\S+)",
+                             subprocess.run(["rustc", "-vV"], check=True, capture_output=True,
+                                            text=True).stdout).group(1)
+            out = d / "dist"
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            env = {"TARGET": host, "BIN": name, "WORKING_DIRECTORY": str(src),
+                   "OUT_DIR": str(out), "GITHUB_OUTPUT": str(gh_output),
+                   "CARGO_TARGET_DIR": str(d / "target")}
+            result = run_script(self.script, env)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            assets = [p.name for p in out.iterdir()]
+            self.assertEqual(len(assets), 2, assets)
+            self.assertTrue(any(a.endswith(".sha256") for a in assets), assets)
 
 
 if __name__ == "__main__":

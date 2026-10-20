@@ -1,0 +1,57 @@
+name: Release a Rust target
+description: Build one Rust target in release mode, package and checksum the binary, and optionally upload it to a GitHub release.
+inputs:
+  target:
+    description: Rust target triple to build; must match the runner's architecture.
+    required: true
+  bin:
+    description: Binary name, without .exe.
+    required: true
+  name:
+    description: Asset base name. Defaults to <bin>-<target>.
+    default: ""
+  archive:
+    description: "auto (zip for Windows targets, otherwise tar.gz), tar.gz, zip or none (the bare binary)."
+    default: auto
+  working-directory:
+    description: Directory containing Cargo.toml.
+    default: "."
+  cargo-args:
+    description: Extra cargo build arguments, space-separated (no embedded spaces within one argument, so use --features=a,b).
+    default: ""
+  out-dir:
+    description: Directory the asset and checksum are written to.
+    default: dist
+  release:
+    description: Upload the asset and checksum to the GitHub release for the current tag.
+    default: "false"
+outputs:
+  asset:
+    description: Path of the packaged asset.
+    value: ${{ steps.pkg.outputs.asset }}
+  checksum:
+    description: Path of the asset's .sha256 file.
+    value: ${{ steps.pkg.outputs.checksum }}
+runs:
+  using: composite
+  steps:
+    - name: Build and package
+      id: pkg
+      shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        BIN: ${{ inputs.bin }}
+        NAME: ${{ inputs.name }}
+        ARCHIVE: ${{ inputs.archive }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        CARGO_ARGS: ${{ inputs.cargo-args }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: bash "${{ github.action_path }}/package.sh"
+    - name: Upload to the release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          ${{ steps.pkg.outputs.asset }}
+          ${{ steps.pkg.outputs.checksum }}
+        prerelease: ${{ contains(github.ref_name, '-') }}
