@@ -84,7 +84,26 @@ jobs:
         with: { ccache: "true", cpm-cache: "true" }
 ```
 
+```yaml
+jobs:
+  rust:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        toolchain: [stable]
+        include:
+          - { os: ubuntu-latest, toolchain: beta }
+          - { os: ubuntu-latest, toolchain: "1.85" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ptsouchlos/infra/.github/actions/setup-rust@v1
+        with: { toolchain: "${{ matrix.toolchain }}" }
+      - uses: ptsouchlos/infra/.github/actions/cargo-check@v1
+```
+
 Notes:
+- `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.
 - Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc and clang. Anything else fails fast.
 - `configure-args` is split on spaces, so one argument cannot contain a space.
 - With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
