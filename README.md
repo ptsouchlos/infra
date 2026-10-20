@@ -61,6 +61,7 @@ See [tests/README.md](tests/README.md).
 | `setup-cpp` | `compiler`, `version`, `cmake-version` | installs the compiler (and CMake/Ninja when missing or pinned), exports `CC`/`CXX`, sets up MSVC on Windows |
 | `cmake-build` | `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args`, `test`, `install-prefix`, `ccache`, `cpm-cache` | configure, build, ctest, optional install |
 | `setup-rust` | `toolchain`, `components`, `targets`, `just` | rustup toolchain and targets (a Linux `-musl` target also installs `musl-tools`), cargo cache, optional `just` |
+| `cargo-release` | `target`, `bin`, `name`, `archive`, `working-directory`, `cargo-args`, `out-dir`, `release` | `cargo build --release` for one target, package (tar.gz, zip or the bare binary), write a `.sha256`, optionally upload to the tag's release |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
 | `update-infra` | `tag`, `token`, `branch` | moves the repo's infra embeds (and `@vN` action refs on a major) to a release, then opens or updates a PR |
@@ -102,10 +103,37 @@ jobs:
       - uses: ptsouchlos/infra/.github/actions/cargo-check@v1
 ```
 
+```yaml
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ptsouchlos/infra/.github/actions/setup-rust@v1
+        with: { components: "", targets: "${{ matrix.target }}" }
+      - uses: ptsouchlos/infra/.github/actions/cargo-release@v1
+        with:
+          target: ${{ matrix.target }}
+          bin: my-tool
+          release: ${{ startsWith(github.ref, 'refs/tags/') }}
+```
+
 Notes:
 - `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.
+- `cargo-release` builds for the runner's own architecture only; cross-linking (for example x86_64 to aarch64) is not supported, so run each target on a matching runner.
+- `cargo-release` assets: the archive holds just the binary at its root, and `<asset>.sha256` holds `<hash>  <bare file name>`, so `sha256sum -c` works from the download directory.
 - Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc and clang. Anything else fails fast.
-- `configure-args`, `clippy-args` and `args` are split on spaces, so one argument cannot contain a space: write `--features=a,b`, not `--features "a b"`.
+- `configure-args`, `clippy-args`, `args` and `cargo-args` are split on spaces, so one argument cannot contain a space: write `--features=a,b`, not `--features "a b"`.
 - With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
 - Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).
 - `build-docs` with `publish: true` needs `permissions: { pages: write, id-token: write }` and the `github-pages` environment.
