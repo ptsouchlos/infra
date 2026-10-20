@@ -7,6 +7,9 @@ inputs:
   components:
     description: Space-separated rustup components.
     default: rustfmt clippy
+  targets:
+    description: Space-separated rustup targets to install; a Linux -musl target also installs musl-tools.
+    default: ""
   just:
     description: Also install just.
     default: "false"
@@ -18,17 +21,9 @@ runs:
       env:
         TOOLCHAIN: ${{ inputs.toolchain }}
         COMPONENTS: ${{ inputs.components }}
-      run: |
-        args=()
-        for c in $COMPONENTS; do
-          args+=(--component "$c")
-        done
-        if [ "${#args[@]}" -gt 0 ]; then
-          rustup toolchain install "$TOOLCHAIN" --profile minimal --no-self-update "${args[@]}"
-        else
-          rustup toolchain install "$TOOLCHAIN" --profile minimal --no-self-update
-        fi
-        rustup default "$TOOLCHAIN"
+        TARGETS: ${{ inputs.targets }}
+        RUNNER_OS: ${{ runner.os }}
+      run: bash "${{ github.action_path }}/install.sh"
     - name: Cache cargo output
       uses: Swatinem/rust-cache@v2
     - name: Install just
