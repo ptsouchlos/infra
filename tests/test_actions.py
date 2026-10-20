@@ -455,5 +455,77 @@ class CmakeBuildScript(unittest.TestCase):
         self.assertIn("::error::", result.stdout + result.stderr)
 
 
+@unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
+class CargoCheckScript(unittest.TestCase):
+    script = ACTIONS / "cargo-check" / "run.sh"
+
+    def run_check(self, fail="", **env):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            calls = d / "calls"
+            cargo = d / "cargo"
+            cargo.write_text(
+                "#!/usr/bin/env bash\n"
+                f'echo "$*" >> "{calls}"\n'
+                f'if [ "$1" = "{fail}" ]; then exit 1; fi\n')
+            cargo.chmod(0o755)
+            env = {"PATH": f"{d}{os.pathsep}{os.environ['PATH']}", **env}
+            result = run_script(self.script, env)
+            lines = calls.read_text().splitlines() if calls.exists() else []
+            return result, lines
+
+    def test_defaults_match_the_previous_commands(self):
+        result, calls = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, ["fmt --all --check",
+                                 "clippy --all-targets -- -D warnings",
+                                 "test"])
+
+    def test_args_are_forwarded_to_clippy_and_test(self):
+        result, calls = self.run_check(ARGS="--workspace --all-features")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, ["fmt --all --check",
+                                 "clippy --all-targets --workspace --all-features -- -D warnings",
+                                 "test --workspace --all-features"])
+
+    def test_steps_can_be_switched_off(self):
+        _, calls = self.run_check(RUN_FMT="false", RUN_CLIPPY="false")
+        self.assertEqual(calls, ["test"])
+
+    def test_custom_clippy_args_follow_the_separator(self):
+        _, calls = self.run_check(RUN_FMT="false", RUN_TESTS="false",
+                                  CLIPPY_ARGS="-D warnings -W clippy::pedantic")
+        self.assertEqual(calls, ["clippy --all-targets -- -D warnings -W clippy::pedantic"])
+
+    def test_empty_clippy_args_stay_empty(self):
+        # The action always sets CLIPPY_ARGS; clippy-args: "" must not fall back to -D warnings.
+        _, calls = self.run_check(RUN_FMT="false", RUN_TESTS="false", CLIPPY_ARGS="")
+        self.assertEqual(calls, ["clippy --all-targets --"])
+
+    def test_failing_clippy_stops_before_test(self):
+        result, calls = self.run_check(fail="clippy")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("::group::clippy", result.stdout)
+        self.assertNotIn("test", calls)
+
+
+@unittest.skipUnless(shutil.which("cargo"), "cargo is required")
+class CargoCheckRealScript(unittest.TestCase):
+    script = ACTIONS / "cargo-check" / "run.sh"
+
+    def test_rust_basic_passes_through_the_script(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "my project"
+            subprocess.run(
+                [sys.executable, str(ROOT / "tests" / "generate.py"), "rust-basic", str(out),
+                 "--infra", str(ROOT)],
+                check=True, capture_output=True, text=True)
+            result = run_script(self.script, {"WORKING_DIRECTORY": str(out),
+                                              "ARGS": "--workspace"})
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for group in ("fmt", "clippy", "test"):
+                self.assertIn(f"::group::{group}", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -61,7 +61,7 @@ See [tests/README.md](tests/README.md).
 | `setup-cpp` | `compiler`, `version`, `cmake-version` | installs the compiler (and CMake/Ninja when missing or pinned), exports `CC`/`CXX`, sets up MSVC on Windows |
 | `cmake-build` | `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args`, `test`, `install-prefix`, `ccache`, `cpm-cache` | configure, build, ctest, optional install |
 | `setup-rust` | `toolchain`, `components`, `just` | rustup toolchain, cargo cache, optional `just` |
-| `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test` | `cargo fmt --check`, clippy, test |
+| `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
 | `update-infra` | `tag`, `token`, `branch` | moves the repo's infra embeds (and `@vN` action refs on a major) to a release, then opens or updates a PR |
 
@@ -105,7 +105,7 @@ jobs:
 Notes:
 - `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.
 - Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc and clang. Anything else fails fast.
-- `configure-args` is split on spaces, so one argument cannot contain a space.
+- `configure-args`, `clippy-args` and `args` are split on spaces, so one argument cannot contain a space: write `--features=a,b`, not `--features "a b"`.
 - With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
 - Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).
 - `build-docs` with `publish: true` needs `permissions: { pages: write, id-token: write }` and the `github-pages` environment.
