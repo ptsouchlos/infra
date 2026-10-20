@@ -139,6 +139,37 @@ class SetupCppScript(unittest.TestCase):
         self.assertNotIn("cmake==", result.stdout)
 
 
+class SetupRustScript(unittest.TestCase):
+    script = ACTIONS / "setup-rust" / "install.sh"
+
+    def run_install(self, **env):
+        base = {"DRY_RUN": "1", "TOOLCHAIN": "stable", "COMPONENTS": "",
+                "TARGETS": "", "RUNNER_OS": "Linux"}
+        return run_script(self.script, {**base, **env})
+
+    def test_no_targets_matches_the_previous_commands(self):
+        r = self.run_install(COMPONENTS="rustfmt clippy")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("rustup toolchain install stable --profile minimal --no-self-update "
+                      "--component rustfmt --component clippy", r.stdout)
+        self.assertIn("rustup default stable", r.stdout)
+        self.assertNotIn("--target", r.stdout)
+        self.assertNotIn("apt-get", r.stdout)
+
+    def test_targets_are_added_to_the_toolchain(self):
+        r = self.run_install(TARGETS="x86_64-unknown-linux-musl wasm32-unknown-unknown")
+        self.assertIn("--target x86_64-unknown-linux-musl --target wasm32-unknown-unknown",
+                      r.stdout)
+
+    def test_musl_target_on_linux_installs_musl_tools(self):
+        r = self.run_install(TARGETS="aarch64-unknown-linux-musl")
+        self.assertIn("apt-get install -y musl-tools", r.stdout)
+
+    def test_musl_tools_are_linux_only(self):
+        r = self.run_install(RUNNER_OS="macOS", TARGETS="x86_64-unknown-linux-musl")
+        self.assertNotIn("apt-get", r.stdout)
+
+
 @unittest.skipIf(sys.platform == "win32", "uses a fake gh on PATH")
 @unittest.skipUnless(shutil.which("jq"), "jq is required")
 class NotifyConsumersScript(unittest.TestCase):
