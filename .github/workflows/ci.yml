@@ -203,16 +203,19 @@ jobs:
         run: python tests/run.py cpp-import-std --verbose
 
   rust:
-    name: rust-basic (${{ matrix.os }}, ${{ matrix.toolchain }})
+    name: rust-basic (${{ matrix.os }}, ${{ matrix.toolchain }}${{ matrix.args && ' args' || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         toolchain: [stable]
+        # A base value, so the args leg below is a new job rather than merged into ubuntu/stable.
+        args: [""]
         include:
           - { os: ubuntu-latest, toolchain: beta }
           - { os: ubuntu-latest, toolchain: "1.85" }   # oldest probed: first edition-2024 compiler
+          - { os: ubuntu-latest, toolchain: stable, args: "--workspace --all-features" }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -227,6 +230,7 @@ jobs:
       - uses: ./.github/actions/cargo-check
         with:
           working-directory: _demo/rust-basic
+          args: ${{ matrix.args }}
       - name: Run the infra just recipes
         working-directory: _demo/rust-basic
         run: |

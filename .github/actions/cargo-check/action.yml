@@ -16,23 +16,19 @@ inputs:
   test:
     description: Run cargo test.
     default: "true"
+  args:
+    description: Extra cargo arguments for clippy and test (not fmt), space-separated (no embedded spaces within one argument, so use --features=a,b).
+    default: ""
 runs:
   using: composite
   steps:
-    - name: Format
-      if: inputs.fmt == 'true'
+    - name: Check
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      run: cargo fmt --all --check
-    - name: Clippy
-      if: inputs.clippy == 'true'
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
       env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        RUN_FMT: ${{ inputs.fmt }}
+        RUN_CLIPPY: ${{ inputs.clippy }}
         CLIPPY_ARGS: ${{ inputs.clippy-args }}
-      run: cargo clippy --all-targets -- $CLIPPY_ARGS
-    - name: Test
-      if: inputs.test == 'true'
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      run: cargo test
+        RUN_TESTS: ${{ inputs.test }}
+        ARGS: ${{ inputs.args }}
+      run: bash "${{ github.action_path }}/run.sh"
