@@ -1,0 +1,16 @@
+{
+  "description": "a vcpkg manifest dependency resolves through a cpp/presets vcpkg preset (needs VCPKG_ROOT and network; --set PRESET=... CXX_ID=...)",
+  "includes": ["cpp-presets"],
+  "vars": {"PRESET": "gcc-debug-vcpkg", "CXX_ID": "GNU", "TOOLCHAIN": "gnu"},
+  "requires": {"all": ["git"]},
+  "steps": [
+    {
+      "name": "configure",
+      "cmd": ["cmake", "--preset", "@PRESET@"],
+      "expect_output": "The CXX compiler identification is @CXX_ID@",
+      "extra_args": true
+    },
+    {"name": "build", "cmd": ["cmake", "--build", "--preset", "@PRESET@", "--verbose"]},
+    {"name": "test", "cmd": ["ctest", "--preset", "@PRESET@"]}
+  ]
+}
