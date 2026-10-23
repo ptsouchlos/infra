@@ -90,6 +90,8 @@ jobs:
       - uses: extractions/setup-just@v4
       - name: Run the cpp-just demo project
         run: python tests/run.py cpp-just --verbose
+      - name: Run the cpp-just demo project through presets
+        run: python tests/run.py cpp-just-presets --verbose
 
   # The just recipes use the [doc] attribute, which arrived in just 1.27.0.
   just-min:
@@ -108,6 +110,7 @@ jobs:
         run: |
           just --version
           python tests/run.py cpp-just
+          python tests/run.py cpp-just-presets
           python tests/run.py rust-basic
 
   # Module kinds that need no compiler setup; each entry picks its tools and arguments.

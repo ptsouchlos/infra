@@ -144,7 +144,7 @@ class GenerateTests(unittest.TestCase):
         self.assertIn("git", kind.required_tools("windows"))
 
     def test_just_kinds_require_the_shell_their_justfile_selects(self) -> None:
-        for name in ("cpp-just", "rust-basic"):
+        for name in ("cpp-just", "cpp-just-presets", "rust-basic"):
             kind = generate.load_kind(name)
             self.assertIn("bash", kind.required_tools("linux"), name)
             self.assertIn("pwsh", kind.required_tools("windows"), name)

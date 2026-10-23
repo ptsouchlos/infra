@@ -7,15 +7,15 @@ config := env('BUILD_CONFIG', 'Debug')
 configure *args:
     cmake {{ if preset != '' { '--preset ' + preset } else { '-S . -B ' + build_dir + ' -DCMAKE_BUILD_TYPE=' + config } }} {{args}}
 
-[doc('Build the CMake project (BUILD_CONFIG selects the configuration, default Debug)')]
+[doc('Build the CMake project (BUILD_CONFIG selects the configuration, default Debug; CMAKE_PRESET uses the build preset of that name)')]
 [group('build')]
 build *args:
-    cmake --build {{ build_dir }} --config {{ config }} {{args}}
+    cmake --build {{ if preset != '' { '--preset ' + preset } else { build_dir + ' --config ' + config } }} {{args}}
 
-[doc('Run the tests with CTest (BUILD_CONFIG selects the configuration, default Debug)')]
+[doc('Run the tests with CTest (BUILD_CONFIG selects the configuration, default Debug; CMAKE_PRESET uses the test preset of that name)')]
 [group('test')]
 test *args:
-    ctest --test-dir {{ build_dir }} --build-config {{ config }} --output-on-failure {{args}}
+    ctest {{ if preset != '' { '--preset ' + preset } else { '--test-dir ' + build_dir + ' --build-config ' + config + ' --output-on-failure' } }} {{args}}
 
 [doc('Remove the build directory')]
 [group('build')]
