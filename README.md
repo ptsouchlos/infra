@@ -58,7 +58,7 @@ See [tests/README.md](tests/README.md).
 
 | Action | Inputs | Does |
 | --- | --- | --- |
-| `setup-cpp` | `compiler`, `version`, `cmake-version` | installs the compiler (and CMake/Ninja when missing or pinned), exports `CC`/`CXX`, sets up MSVC on Windows |
+| `setup-cpp` | `compiler`, `version`, `cmake-version`, `vcpkg` | installs the compiler (and CMake/Ninja when missing or pinned), exports `CC`/`CXX`, sets up MSVC on Windows; `vcpkg: true` exports `VCPKG_ROOT`, cloning and bootstrapping vcpkg into `RUNNER_TEMP` unless the job already set it |
 | `cmake-build` | `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args`, `test`, `install-prefix`, `ccache`, `cpm-cache` | configure, build, ctest, optional install |
 | `setup-rust` | `toolchain`, `components`, `targets`, `just` | rustup toolchain and targets (a Linux `-musl` target also installs `musl-tools`), cargo cache, optional `just` |
 | `cargo-release` | `target`, `bin`, `name`, `archive`, `working-directory`, `cargo-args`, `out-dir`, `release` | `cargo build --release` for one target, package (tar.gz, zip or the bare binary), write a `.sha256`, optionally upload to the tag's release |
