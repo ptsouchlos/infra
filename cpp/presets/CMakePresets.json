@@ -1,0 +1,484 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "infra-dir",
+      "hidden": true,
+      "description": "PT_INFRA_DIR for presets defined in this file. Consumer presets set PT_INFRA_DIR themselves, since ${fileDir} expands in the inheriting file.",
+      "environment": {"PT_INFRA_DIR": "${fileDir}/../.."}
+    },
+    {
+      "name": "host-linux",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux"}
+    },
+    {
+      "name": "host-macos",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin"}
+    },
+    {
+      "name": "host-windows",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"}
+    },
+    {
+      "name": "host-not-macos",
+      "hidden": true,
+      "condition": {"type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Darwin"}
+    },
+    {
+      "name": "ninja",
+      "hidden": true,
+      "description": "Ninja generator, building into build/<preset>.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "toolchain-gnu",
+      "hidden": true,
+      "description": "Compile with infra's gnu.cmake toolchain file.",
+      "environment": {"PT_TOOLCHAIN_FILE": "$env{PT_INFRA_DIR}/cpp/cmake/toolchains/gnu.cmake"},
+      "cacheVariables": {"CMAKE_TOOLCHAIN_FILE": "$env{PT_TOOLCHAIN_FILE}"}
+    },
+    {
+      "name": "toolchain-llvm",
+      "hidden": true,
+      "description": "Compile with infra's llvm.cmake toolchain file.",
+      "environment": {"PT_TOOLCHAIN_FILE": "$env{PT_INFRA_DIR}/cpp/cmake/toolchains/llvm.cmake"},
+      "cacheVariables": {"CMAKE_TOOLCHAIN_FILE": "$env{PT_TOOLCHAIN_FILE}"}
+    },
+    {
+      "name": "toolchain-llvm-libcxx",
+      "hidden": true,
+      "description": "Compile with infra's llvm_libcxx.cmake toolchain file.",
+      "environment": {"PT_TOOLCHAIN_FILE": "$env{PT_INFRA_DIR}/cpp/cmake/toolchains/llvm_libcxx.cmake"},
+      "cacheVariables": {"CMAKE_TOOLCHAIN_FILE": "$env{PT_TOOLCHAIN_FILE}"}
+    },
+    {
+      "name": "toolchain-appleclang",
+      "hidden": true,
+      "description": "Compile with infra's appleclang.cmake toolchain file.",
+      "environment": {"PT_TOOLCHAIN_FILE": "$env{PT_INFRA_DIR}/cpp/cmake/toolchains/appleclang.cmake"},
+      "cacheVariables": {"CMAKE_TOOLCHAIN_FILE": "$env{PT_TOOLCHAIN_FILE}"}
+    },
+    {
+      "name": "toolchain-msvc",
+      "hidden": true,
+      "description": "Compile with infra's msvc.cmake toolchain file.",
+      "environment": {"PT_TOOLCHAIN_FILE": "$env{PT_INFRA_DIR}/cpp/cmake/toolchains/msvc.cmake"},
+      "cacheVariables": {"CMAKE_TOOLCHAIN_FILE": "$env{PT_TOOLCHAIN_FILE}"},
+      "architecture": {"value": "x64", "strategy": "external"},
+      "toolset": {"value": "host=x64", "strategy": "external"}
+    },
+    {"name": "type-debug", "hidden": true, "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug"}},
+    {"name": "type-release", "hidden": true, "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"}},
+    {
+      "name": "type-relwithdebinfo",
+      "hidden": true,
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "RelWithDebInfo"}
+    },
+    {
+      "name": "sanitizer-maxsan",
+      "hidden": true,
+      "description": "All non-conflicting sanitizers the toolchain supports.",
+      "cacheVariables": {"PT_BUILDSYS_SANITIZER": "MaxSan"}
+    },
+    {
+      "name": "sanitizer-tsan",
+      "hidden": true,
+      "description": "Thread sanitizer.",
+      "cacheVariables": {"PT_BUILDSYS_SANITIZER": "TSan"}
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
+      "description": "Resolve dependencies with vcpkg (manifest mode, $env{VCPKG_ROOT}), chainloading the toolchain mixin listed after it.",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "$env{PT_TOOLCHAIN_FILE}"
+      }
+    },
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug",
+      "inherits": ["infra-dir", "ninja", "toolchain-gnu", "type-debug", "host-linux"]
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "GCC Release",
+      "inherits": ["infra-dir", "ninja", "toolchain-gnu", "type-release", "host-linux"]
+    },
+    {
+      "name": "gcc-relwithdebinfo",
+      "displayName": "GCC RelWithDebInfo",
+      "inherits": ["infra-dir", "ninja", "toolchain-gnu", "type-relwithdebinfo", "host-linux"]
+    },
+    {
+      "name": "gcc-maxsan",
+      "displayName": "GCC Debug (MaxSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-gnu", "type-debug", "sanitizer-maxsan", "host-linux"]
+    },
+    {
+      "name": "gcc-tsan",
+      "displayName": "GCC Debug (TSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-gnu", "type-debug", "sanitizer-tsan", "host-linux"]
+    },
+    {
+      "name": "gcc-debug-vcpkg",
+      "displayName": "GCC Debug (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-gnu", "type-debug", "host-linux"]
+    },
+    {
+      "name": "gcc-release-vcpkg",
+      "displayName": "GCC Release (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-gnu", "type-release", "host-linux"]
+    },
+    {
+      "name": "clang-debug",
+      "displayName": "Clang Debug",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm", "type-debug", "host-not-macos"]
+    },
+    {
+      "name": "clang-release",
+      "displayName": "Clang Release",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm", "type-release", "host-not-macos"]
+    },
+    {
+      "name": "clang-relwithdebinfo",
+      "displayName": "Clang RelWithDebInfo",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm", "type-relwithdebinfo", "host-not-macos"]
+    },
+    {
+      "name": "clang-maxsan",
+      "displayName": "Clang Debug (MaxSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm", "type-debug", "sanitizer-maxsan", "host-linux"]
+    },
+    {
+      "name": "clang-tsan",
+      "displayName": "Clang Debug (TSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm", "type-debug", "sanitizer-tsan", "host-linux"]
+    },
+    {
+      "name": "clang-debug-vcpkg",
+      "displayName": "Clang Debug (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-llvm", "type-debug", "host-not-macos"]
+    },
+    {
+      "name": "clang-release-vcpkg",
+      "displayName": "Clang Release (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-llvm", "type-release", "host-not-macos"]
+    },
+    {
+      "name": "clang-libcxx-debug",
+      "displayName": "Clang + libc++ Debug",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm-libcxx", "type-debug", "host-linux"]
+    },
+    {
+      "name": "clang-libcxx-release",
+      "displayName": "Clang + libc++ Release",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm-libcxx", "type-release", "host-linux"]
+    },
+    {
+      "name": "clang-libcxx-maxsan",
+      "displayName": "Clang + libc++ Debug (MaxSan)",
+      "inherits": [
+        "infra-dir",
+        "ninja",
+        "toolchain-llvm-libcxx",
+        "type-debug",
+        "sanitizer-maxsan",
+        "host-linux"
+      ]
+    },
+    {
+      "name": "clang-libcxx-tsan",
+      "displayName": "Clang + libc++ Debug (TSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-llvm-libcxx", "type-debug", "sanitizer-tsan", "host-linux"]
+    },
+    {
+      "name": "appleclang-debug",
+      "displayName": "AppleClang Debug",
+      "inherits": ["infra-dir", "ninja", "toolchain-appleclang", "type-debug", "host-macos"]
+    },
+    {
+      "name": "appleclang-release",
+      "displayName": "AppleClang Release",
+      "inherits": ["infra-dir", "ninja", "toolchain-appleclang", "type-release", "host-macos"]
+    },
+    {
+      "name": "appleclang-relwithdebinfo",
+      "displayName": "AppleClang RelWithDebInfo",
+      "inherits": ["infra-dir", "ninja", "toolchain-appleclang", "type-relwithdebinfo", "host-macos"]
+    },
+    {
+      "name": "appleclang-maxsan",
+      "displayName": "AppleClang Debug (MaxSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-appleclang", "type-debug", "sanitizer-maxsan", "host-macos"]
+    },
+    {
+      "name": "appleclang-tsan",
+      "displayName": "AppleClang Debug (TSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-appleclang", "type-debug", "sanitizer-tsan", "host-macos"]
+    },
+    {
+      "name": "appleclang-debug-vcpkg",
+      "displayName": "AppleClang Debug (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-appleclang", "type-debug", "host-macos"]
+    },
+    {
+      "name": "appleclang-release-vcpkg",
+      "displayName": "AppleClang Release (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-appleclang", "type-release", "host-macos"]
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "MSVC Debug",
+      "inherits": ["infra-dir", "ninja", "toolchain-msvc", "type-debug", "host-windows"]
+    },
+    {
+      "name": "msvc-release",
+      "displayName": "MSVC Release",
+      "inherits": ["infra-dir", "ninja", "toolchain-msvc", "type-release", "host-windows"]
+    },
+    {
+      "name": "msvc-relwithdebinfo",
+      "displayName": "MSVC RelWithDebInfo",
+      "inherits": ["infra-dir", "ninja", "toolchain-msvc", "type-relwithdebinfo", "host-windows"]
+    },
+    {
+      "name": "msvc-maxsan",
+      "displayName": "MSVC Debug (MaxSan)",
+      "inherits": ["infra-dir", "ninja", "toolchain-msvc", "type-debug", "sanitizer-maxsan", "host-windows"]
+    },
+    {
+      "name": "msvc-debug-vcpkg",
+      "displayName": "MSVC Debug (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-msvc", "type-debug", "host-windows"]
+    },
+    {
+      "name": "msvc-release-vcpkg",
+      "displayName": "MSVC Release (vcpkg)",
+      "inherits": ["vcpkg", "infra-dir", "ninja", "toolchain-msvc", "type-release", "host-windows"]
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host-linux",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux"}
+    },
+    {
+      "name": "host-macos",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin"}
+    },
+    {
+      "name": "host-windows",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"}
+    },
+    {
+      "name": "host-not-macos",
+      "hidden": true,
+      "condition": {"type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Darwin"}
+    },
+    {"name": "gcc-debug", "configurePreset": "gcc-debug", "inherits": "host-linux"},
+    {"name": "gcc-release", "configurePreset": "gcc-release", "inherits": "host-linux"},
+    {
+      "name": "gcc-relwithdebinfo",
+      "configurePreset": "gcc-relwithdebinfo",
+      "inherits": "host-linux"
+    },
+    {"name": "gcc-maxsan", "configurePreset": "gcc-maxsan", "inherits": "host-linux"},
+    {"name": "gcc-tsan", "configurePreset": "gcc-tsan", "inherits": "host-linux"},
+    {"name": "gcc-debug-vcpkg", "configurePreset": "gcc-debug-vcpkg", "inherits": "host-linux"},
+    {"name": "gcc-release-vcpkg", "configurePreset": "gcc-release-vcpkg", "inherits": "host-linux"},
+    {"name": "clang-debug", "configurePreset": "clang-debug", "inherits": "host-not-macos"},
+    {"name": "clang-release", "configurePreset": "clang-release", "inherits": "host-not-macos"},
+    {
+      "name": "clang-relwithdebinfo",
+      "configurePreset": "clang-relwithdebinfo",
+      "inherits": "host-not-macos"
+    },
+    {"name": "clang-maxsan", "configurePreset": "clang-maxsan", "inherits": "host-linux"},
+    {"name": "clang-tsan", "configurePreset": "clang-tsan", "inherits": "host-linux"},
+    {
+      "name": "clang-debug-vcpkg",
+      "configurePreset": "clang-debug-vcpkg",
+      "inherits": "host-not-macos"
+    },
+    {
+      "name": "clang-release-vcpkg",
+      "configurePreset": "clang-release-vcpkg",
+      "inherits": "host-not-macos"
+    },
+    {
+      "name": "clang-libcxx-debug",
+      "configurePreset": "clang-libcxx-debug",
+      "inherits": "host-linux"
+    },
+    {
+      "name": "clang-libcxx-release",
+      "configurePreset": "clang-libcxx-release",
+      "inherits": "host-linux"
+    },
+    {
+      "name": "clang-libcxx-maxsan",
+      "configurePreset": "clang-libcxx-maxsan",
+      "inherits": "host-linux"
+    },
+    {"name": "clang-libcxx-tsan", "configurePreset": "clang-libcxx-tsan", "inherits": "host-linux"},
+    {"name": "appleclang-debug", "configurePreset": "appleclang-debug", "inherits": "host-macos"},
+    {
+      "name": "appleclang-release",
+      "configurePreset": "appleclang-release",
+      "inherits": "host-macos"
+    },
+    {
+      "name": "appleclang-relwithdebinfo",
+      "configurePreset": "appleclang-relwithdebinfo",
+      "inherits": "host-macos"
+    },
+    {"name": "appleclang-maxsan", "configurePreset": "appleclang-maxsan", "inherits": "host-macos"},
+    {"name": "appleclang-tsan", "configurePreset": "appleclang-tsan", "inherits": "host-macos"},
+    {
+      "name": "appleclang-debug-vcpkg",
+      "configurePreset": "appleclang-debug-vcpkg",
+      "inherits": "host-macos"
+    },
+    {
+      "name": "appleclang-release-vcpkg",
+      "configurePreset": "appleclang-release-vcpkg",
+      "inherits": "host-macos"
+    },
+    {"name": "msvc-debug", "configurePreset": "msvc-debug", "inherits": "host-windows"},
+    {"name": "msvc-release", "configurePreset": "msvc-release", "inherits": "host-windows"},
+    {
+      "name": "msvc-relwithdebinfo",
+      "configurePreset": "msvc-relwithdebinfo",
+      "inherits": "host-windows"
+    },
+    {"name": "msvc-maxsan", "configurePreset": "msvc-maxsan", "inherits": "host-windows"},
+    {"name": "msvc-debug-vcpkg", "configurePreset": "msvc-debug-vcpkg", "inherits": "host-windows"},
+    {
+      "name": "msvc-release-vcpkg",
+      "configurePreset": "msvc-release-vcpkg",
+      "inherits": "host-windows"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "host-linux",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux"},
+      "output": {"outputOnFailure": true}
+    },
+    {
+      "name": "host-macos",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin"},
+      "output": {"outputOnFailure": true}
+    },
+    {
+      "name": "host-windows",
+      "hidden": true,
+      "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"},
+      "output": {"outputOnFailure": true}
+    },
+    {
+      "name": "host-not-macos",
+      "hidden": true,
+      "condition": {"type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Darwin"},
+      "output": {"outputOnFailure": true}
+    },
+    {"name": "gcc-debug", "configurePreset": "gcc-debug", "inherits": "host-linux"},
+    {"name": "gcc-release", "configurePreset": "gcc-release", "inherits": "host-linux"},
+    {
+      "name": "gcc-relwithdebinfo",
+      "configurePreset": "gcc-relwithdebinfo",
+      "inherits": "host-linux"
+    },
+    {"name": "gcc-maxsan", "configurePreset": "gcc-maxsan", "inherits": "host-linux"},
+    {"name": "gcc-tsan", "configurePreset": "gcc-tsan", "inherits": "host-linux"},
+    {"name": "gcc-debug-vcpkg", "configurePreset": "gcc-debug-vcpkg", "inherits": "host-linux"},
+    {"name": "gcc-release-vcpkg", "configurePreset": "gcc-release-vcpkg", "inherits": "host-linux"},
+    {"name": "clang-debug", "configurePreset": "clang-debug", "inherits": "host-not-macos"},
+    {"name": "clang-release", "configurePreset": "clang-release", "inherits": "host-not-macos"},
+    {
+      "name": "clang-relwithdebinfo",
+      "configurePreset": "clang-relwithdebinfo",
+      "inherits": "host-not-macos"
+    },
+    {"name": "clang-maxsan", "configurePreset": "clang-maxsan", "inherits": "host-linux"},
+    {"name": "clang-tsan", "configurePreset": "clang-tsan", "inherits": "host-linux"},
+    {
+      "name": "clang-debug-vcpkg",
+      "configurePreset": "clang-debug-vcpkg",
+      "inherits": "host-not-macos"
+    },
+    {
+      "name": "clang-release-vcpkg",
+      "configurePreset": "clang-release-vcpkg",
+      "inherits": "host-not-macos"
+    },
+    {
+      "name": "clang-libcxx-debug",
+      "configurePreset": "clang-libcxx-debug",
+      "inherits": "host-linux"
+    },
+    {
+      "name": "clang-libcxx-release",
+      "configurePreset": "clang-libcxx-release",
+      "inherits": "host-linux"
+    },
+    {
+      "name": "clang-libcxx-maxsan",
+      "configurePreset": "clang-libcxx-maxsan",
+      "inherits": "host-linux"
+    },
+    {"name": "clang-libcxx-tsan", "configurePreset": "clang-libcxx-tsan", "inherits": "host-linux"},
+    {"name": "appleclang-debug", "configurePreset": "appleclang-debug", "inherits": "host-macos"},
+    {
+      "name": "appleclang-release",
+      "configurePreset": "appleclang-release",
+      "inherits": "host-macos"
+    },
+    {
+      "name": "appleclang-relwithdebinfo",
+      "configurePreset": "appleclang-relwithdebinfo",
+      "inherits": "host-macos"
+    },
+    {"name": "appleclang-maxsan", "configurePreset": "appleclang-maxsan", "inherits": "host-macos"},
+    {"name": "appleclang-tsan", "configurePreset": "appleclang-tsan", "inherits": "host-macos"},
+    {
+      "name": "appleclang-debug-vcpkg",
+      "configurePreset": "appleclang-debug-vcpkg",
+      "inherits": "host-macos"
+    },
+    {
+      "name": "appleclang-release-vcpkg",
+      "configurePreset": "appleclang-release-vcpkg",
+      "inherits": "host-macos"
+    },
+    {"name": "msvc-debug", "configurePreset": "msvc-debug", "inherits": "host-windows"},
+    {"name": "msvc-release", "configurePreset": "msvc-release", "inherits": "host-windows"},
+    {
+      "name": "msvc-relwithdebinfo",
+      "configurePreset": "msvc-relwithdebinfo",
+      "inherits": "host-windows"
+    },
+    {"name": "msvc-maxsan", "configurePreset": "msvc-maxsan", "inherits": "host-windows"},
+    {"name": "msvc-debug-vcpkg", "configurePreset": "msvc-debug-vcpkg", "inherits": "host-windows"},
+    {
+      "name": "msvc-release-vcpkg",
+      "configurePreset": "msvc-release-vcpkg",
+      "inherits": "host-windows"
+    }
+  ]
+}
