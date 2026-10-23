@@ -29,6 +29,7 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-install` | `pt_install_library` output is found by a separate consumer via `find_package` |
 | `cpp-cpm` | `cpm` bootstrap fetches and builds a pinned dependency (network) |
 | `cpp-toolchain` | a toolchain file configures and builds (`--set TOOLCHAIN=...`) |
+| `cpp-just-presets` | the same recipes with `preset` set: configure, build and test all go through the presets |
 | `cpp-just` | `cpp/just/cmake.just` configure, build and test recipes (also run natively on all three OSes in CI) |
 | `cpp-cache` | `pt_enable_cache` makes ccache the compiler launcher (needs `ccache`; not run on Windows, where the Visual Studio generators ignore compiler launchers) |
 | `cpp-linker` | `pt_configure_linker` configures and builds; `--set LINKER=LLD --set LINK_FLAG=-fuse-ld=lld` also checks the flag reaches the link line (`MOLD`: `-fuse-ld=mold`) |
@@ -40,7 +41,7 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
 
-The two `just` kinds need `just` 1.27.0 or newer (older versions reject the `[doc]` attribute); CI
+The `just` kinds need `just` 1.27.0 or newer (older versions reject the `[doc]` attribute); CI
 checks the floor with a `just-min` job.
 | `docs` | Doxygen builds from a plain `Doxyfile` |
 
