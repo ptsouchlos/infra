@@ -5,13 +5,13 @@ inputs:
     description: Directory containing the top-level CMakeLists.txt.
     default: "."
   build-dir:
-    description: Build directory. With a preset, it must match the preset's binaryDir.
+    description: Build directory. Ignored with a preset, which sets its own binaryDir.
     default: build
   build-type:
-    description: CMAKE_BUILD_TYPE (ignored by the configure step when a preset is used).
+    description: CMAKE_BUILD_TYPE; with a preset, used only for steps that have no build or test preset of that name.
     default: Release
   preset:
-    description: Optional configure preset name.
+    description: Optional configure preset name. Build and test presets of the same name run those steps when they exist.
     default: ""
   configure-args:
     description: Extra configure arguments, space-separated (no embedded spaces within one argument).

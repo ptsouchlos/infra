@@ -134,7 +134,8 @@ Notes:
 - `cargo-release` assets: the archive holds just the binary at its root, and `<asset>.sha256` holds `<hash>  <bare file name>`, so `sha256sum -c` works from the download directory.
 - Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc and clang. Anything else fails fast.
 - `configure-args`, `clippy-args`, `args` and `cargo-args` are split on spaces, so one argument cannot contain a space: write `--features=a,b`, not `--features "a b"`.
-- With a `preset`, the preset runs the configure step and `build-dir` must equal its `binaryDir`.
+- With a `preset`, the preset runs the configure step, `build-dir` is ignored in favor of its
+  `binaryDir`, and build and test presets of the same name run those steps when they exist.
 - Use forward slashes in paths on Windows (`install-prefix`, `build-dir`).
 - `build-docs` with `publish: true` needs `permissions: { pages: write, id-token: write }` and the `github-pages` environment.
 
