@@ -74,6 +74,29 @@ jobs:
           build-dir: _demo/cpp-install/build/consumer
           configure-args: -DCMAKE_PREFIX_PATH=${{ github.workspace }}/_demo/cpp-install/prefix
 
+  # setup-cpp with vcpkg: true clones and bootstraps vcpkg and exports VCPKG_ROOT.
+  setup-vcpkg:
+    name: setup-cpp vcpkg (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, compiler: gcc }
+          - { os: macos-latest, compiler: appleclang }
+          - { os: windows-latest, compiler: msvc }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-cpp
+        with:
+          compiler: ${{ matrix.compiler }}
+          vcpkg: "true"
+      - name: Run the bootstrapped vcpkg
+        shell: bash
+        run: |
+          echo "VCPKG_ROOT=$VCPKG_ROOT"
+          "$VCPKG_ROOT/vcpkg" version
+
   # cmake.just runs on each OS's default generator (Visual Studio on Windows), so no setup-cpp here.
   cpp-just:
     name: cpp-just (${{ matrix.os }})

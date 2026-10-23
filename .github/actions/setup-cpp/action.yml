@@ -1,5 +1,5 @@
 name: Set up C++
-description: Install a C++ compiler, CMake and Ninja, and export CC/CXX.
+description: Install a C++ compiler, CMake and Ninja, and export CC/CXX (and optionally VCPKG_ROOT).
 inputs:
   compiler:
     description: "Compiler: gcc or clang (Linux), appleclang (macOS), msvc or clang (Windows)."
@@ -10,6 +10,9 @@ inputs:
   cmake-version:
     description: Exact CMake version to install with pip. Empty keeps the runner's CMake.
     default: ""
+  vcpkg:
+    description: Export VCPKG_ROOT, cloning and bootstrapping vcpkg unless the job already set it.
+    default: "false"
 runs:
   using: composite
   steps:
@@ -19,6 +22,7 @@ runs:
         COMPILER: ${{ inputs.compiler }}
         VERSION: ${{ inputs.version }}
         CMAKE_VERSION: ${{ inputs.cmake-version }}
+        VCPKG: ${{ inputs.vcpkg }}
       run: bash "${{ github.action_path }}/install.sh"
     - name: Set up the MSVC environment
       if: runner.os == 'Windows'
