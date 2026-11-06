@@ -1,0 +1,15 @@
+{
+  "description": "cpp-basic configured, built and tested through cpp/presets (--set PRESET=<infra preset or 'composed'> CXX_ID=<compiler id> TOOLCHAIN=<mixin for 'composed'>)",
+  "includes": ["cpp-basic"],
+  "vars": {"PRESET": "gcc-debug", "CXX_ID": "GNU", "TOOLCHAIN": "gnu"},
+  "steps": [
+    {
+      "name": "configure",
+      "cmd": ["cmake", "--preset", "@PRESET@"],
+      "expect_output": "The CXX compiler identification is @CXX_ID@",
+      "extra_args": true
+    },
+    {"name": "build", "cmd": ["cmake", "--build", "--preset", "@PRESET@", "--verbose"]},
+    {"name": "test", "cmd": ["ctest", "--preset", "@PRESET@"]}
+  ]
+}

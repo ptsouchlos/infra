@@ -46,6 +46,75 @@ must run before the targets it should affect are created, as must `pt_enable_ipo
 
 See `NOTICE.md` for upstream attribution.
 
+### CMake presets
+
+`cpp/presets/CMakePresets.json` wraps the toolchain files in presets (format 6, CMake 3.25+).
+Include it from your own `CMakePresets.json`:
+
+```json
+{
+  "version": 6,
+  "include": ["infra/cpp/presets/CMakePresets.json"]
+}
+```
+
+That alone gives configure, build and test presets named `<compiler>-<variant>`, each shown only
+on a host that can run it. They use Ninja and build into `build/<preset>`:
+
+| Compiler (toolchain) | Host | Variants |
+| --- | --- | --- |
+| `gcc` (gnu) | Linux | `debug`, `release`, `relwithdebinfo`, `maxsan`, `tsan`, `debug-vcpkg`, `release-vcpkg` |
+| `clang` (llvm) | Linux, Windows | same as gcc; `maxsan` and `tsan` on Linux only |
+| `clang-libcxx` (llvm_libcxx) | Linux | `debug`, `release`, `maxsan`, `tsan` |
+| `appleclang` | macOS | same as gcc |
+| `msvc` | Windows | `debug`, `release`, `relwithdebinfo`, `maxsan`, `debug-vcpkg`, `release-vcpkg` |
+
+`maxsan` and `tsan` are Debug builds with the toolchain's `PT_BUILDSYS_SANITIZER` set to `MaxSan`
+or `TSan`. Use them as `cmake --preset clang-maxsan`, `cmake --build --preset clang-maxsan`,
+`ctest --preset clang-maxsan`.
+
+To compose your own presets, inherit the hidden mixins. Set `PT_INFRA_DIR` to the embedded infra
+directory in a preset you list first, because `${fileDir}` expands in the file of the preset that
+inherits, not in infra's:
+
+```json
+{
+  "version": 6,
+  "include": ["infra/cpp/presets/CMakePresets.json"],
+  "configurePresets": [
+    { "name": "infra", "hidden": true, "environment": { "PT_INFRA_DIR": "${sourceDir}/infra" } },
+    { "name": "dev", "inherits": ["infra", "vcpkg", "ninja", "toolchain-llvm", "type-debug", "host-linux"],
+      "cacheVariables": { "MY_PROJECT_BUILD_TESTS": "ON" } },
+    { "name": "bench", "inherits": ["infra", "gcc-release"],
+      "cacheVariables": { "MY_PROJECT_BUILD_BENCHMARKS": "ON" } }
+  ],
+  "buildPresets": [{ "name": "dev", "configurePreset": "dev" }],
+  "testPresets": [{ "name": "dev", "configurePreset": "dev", "output": { "outputOnFailure": true } }]
+}
+```
+
+| Mixin | Sets |
+| --- | --- |
+| `ninja` | Ninja generator, `binaryDir` `build/<preset>` |
+| `toolchain-{gnu,llvm,llvm-libcxx,appleclang,msvc}` | `CMAKE_TOOLCHAIN_FILE` (through `PT_TOOLCHAIN_FILE`) |
+| `type-{debug,release,relwithdebinfo}` | `CMAKE_BUILD_TYPE` |
+| `sanitizer-{maxsan,tsan}` | `PT_BUILDSYS_SANITIZER` |
+| `vcpkg` | `CMAKE_TOOLCHAIN_FILE` to `$env{VCPKG_ROOT}`'s `vcpkg.cmake`, chainloading the toolchain mixin |
+| `host-{linux,macos,windows,not-macos}` | a host condition (build and test presets have the same names) |
+| `infra-dir` | `PT_INFRA_DIR` for presets defined in infra's own file only |
+
+Notes:
+- Preset names share one namespace with the presets in your file, so a name that infra also
+  defines (for example `gcc-debug` or `ninja`) is a duplicate-preset error. Rename yours.
+- List `vcpkg` before the toolchain mixin: when two parents set the same cache variable, the
+  earlier one wins.
+- The vcpkg presets use manifest mode: add a `vcpkg.json` and set `VCPKG_ROOT`. vcpkg builds
+  the ports with its triplet's compiler, not the chainloaded toolchain, so the sanitizer flags do
+  not reach them and there is no `clang-libcxx` vcpkg preset.
+- With the toolchain mixins, the infra modules are on `CMAKE_MODULE_PATH` after `project()`.
+  `include(prevent_in_source_builds)` before `project()` still needs your own
+  `list(APPEND CMAKE_MODULE_PATH ...)`.
+
 ## Tests
 
 `tests/` generates throwaway projects that exercise each module on Linux, macOS and Windows.

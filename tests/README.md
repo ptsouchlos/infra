@@ -29,6 +29,8 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-install` | `pt_install_library` output is found by a separate consumer via `find_package` |
 | `cpp-cpm` | `cpm` bootstrap fetches and builds a pinned dependency (network) |
 | `cpp-toolchain` | a toolchain file configures and builds (`--set TOOLCHAIN=...`) |
+| `cpp-presets` | `cpp/presets` configure, build and test presets (`--set PRESET=clang-maxsan --set CXX_ID=Clang`); `PRESET=composed` builds a consumer preset made from the mixins (`--set TOOLCHAIN=llvm` picks its toolchain mixin) |
+| `cpp-vcpkg` | a `vcpkg.json` dependency resolves through a vcpkg preset (`--set PRESET=...`; needs `VCPKG_ROOT` and network) |
 | `cpp-just` | `cpp/just/cmake.just` configure, build and test recipes (also run natively on all three OSes in CI) |
 | `cpp-cache` | `pt_enable_cache` makes ccache the compiler launcher (needs `ccache`; not run on Windows, where the Visual Studio generators ignore compiler launchers) |
 | `cpp-linker` | `pt_configure_linker` configures and builds; `--set LINKER=LLD --set LINK_FLAG=-fuse-ld=lld` also checks the flag reaches the link line (`MOLD`: `-fuse-ld=mold`) |
