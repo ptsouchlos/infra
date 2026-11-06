@@ -27,23 +27,49 @@ if [ -n "$CONFIGURE_ARGS" ]; then
     configure+=("${extra[@]}")
 fi
 
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+
 echo "::group::configure"
-cmake "${configure[@]}"
+cmake "${configure[@]}" | tee "$log"
 echo "::endgroup::"
 
-# With a preset, the preset decides the binary dir; build/test/install must use the same one.
-if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    echo "::error::no CMakeCache.txt in '$BUILD_DIR' after configure; build-dir must match the preset's binaryDir"
-    exit 1
+# With a preset, the preset decides the binary dir; read it back from the configure output.
+if [ -n "$PRESET" ]; then
+    BUILD_DIR="$(sed -n 's/^-- Build files have been written to: //p' "$log" | tail -n 1 | tr -d '\r')"
+    if [ -z "$BUILD_DIR" ]; then
+        echo "::error::could not find the build directory of preset '$PRESET' in the configure output"
+        exit 1
+    fi
+fi
+
+# A build or test preset named like the configure preset takes over that step.
+build_preset=false
+test_preset=false
+if [ -n "$PRESET" ]; then
+    if (cd "$SOURCE_DIR" && cmake --build --list-presets 2>/dev/null) | grep -qF "\"$PRESET\""; then
+        build_preset=true
+    fi
+    if (cd "$SOURCE_DIR" && ctest --list-presets 2>/dev/null) | grep -qF "\"$PRESET\""; then
+        test_preset=true
+    fi
 fi
 
 echo "::group::build"
-cmake --build "$BUILD_DIR" --config "$BUILD_TYPE"
+if [ "$build_preset" = true ]; then
+    (cd "$SOURCE_DIR" && cmake --build --preset "$PRESET")
+else
+    cmake --build "$BUILD_DIR" --config "$BUILD_TYPE"
+fi
 echo "::endgroup::"
 
 if [ "$RUN_TESTS" = true ]; then
     echo "::group::test"
-    ctest --test-dir "$BUILD_DIR" --build-config "$BUILD_TYPE" --output-on-failure
+    if [ "$test_preset" = true ]; then
+        (cd "$SOURCE_DIR" && ctest --preset "$PRESET")
+    else
+        ctest --test-dir "$BUILD_DIR" --build-config "$BUILD_TYPE" --output-on-failure
+    fi
     echo "::endgroup::"
 fi
 
