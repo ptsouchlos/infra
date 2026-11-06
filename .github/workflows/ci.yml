@@ -74,6 +74,46 @@ jobs:
           build-dir: _demo/cpp-install/build/consumer
           configure-args: -DCMAKE_PREFIX_PATH=${{ github.workspace }}/_demo/cpp-install/prefix
 
+  # cpp/presets: the preset's toolchain file picks the compiler; setup-cpp provides Ninja and,
+  # on Windows, the MSVC environment.
+  presets:
+    name: ${{ matrix.kind }} ${{ matrix.preset }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { kind: cpp-presets, os: ubuntu-latest, compiler: gcc, preset: gcc-debug, cxx: GNU }
+          - { kind: cpp-presets, os: ubuntu-latest, compiler: clang, preset: clang-maxsan, cxx: Clang }
+          - { kind: cpp-presets, os: ubuntu-latest, compiler: clang, preset: clang-libcxx-debug, cxx: Clang, install: "sudo apt-get install -y libc++-dev libc++abi-dev" }
+          - { kind: cpp-presets, os: ubuntu-latest, compiler: gcc, preset: composed, cxx: GNU }
+          - { kind: cpp-presets, os: macos-latest, compiler: appleclang, preset: appleclang-debug, cxx: AppleClang }
+          - { kind: cpp-presets, os: macos-latest, compiler: appleclang, preset: appleclang-maxsan, cxx: AppleClang }
+          - { kind: cpp-presets, os: windows-latest, compiler: msvc, preset: msvc-debug, cxx: MSVC }
+          - { kind: cpp-presets, os: windows-latest, compiler: clang, preset: clang-release, cxx: Clang }
+          # The runner images ship vcpkg on Linux and Windows (VCPKG_INSTALLATION_ROOT).
+          - { kind: cpp-vcpkg, os: ubuntu-latest, compiler: gcc, preset: gcc-debug-vcpkg, cxx: GNU }
+          - { kind: cpp-vcpkg, os: windows-latest, compiler: msvc, preset: msvc-debug-vcpkg, cxx: MSVC }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: ./.github/actions/setup-cpp
+        with:
+          compiler: ${{ matrix.compiler }}
+      - name: Install tools
+        if: matrix.install != ''
+        shell: bash
+        run: ${{ matrix.install }}
+      - name: Point VCPKG_ROOT at the runner's vcpkg
+        if: matrix.kind == 'cpp-vcpkg'
+        shell: bash
+        run: echo "VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT//\\//}" >> "$GITHUB_ENV"
+      - name: Run the demo project
+        shell: bash
+        run: python tests/run.py ${{ matrix.kind }} --set PRESET=${{ matrix.preset }} --set CXX_ID=${{ matrix.cxx }} --verbose
+
   # cmake.just runs on each OS's default generator (Visual Studio on Windows), so no setup-cpp here.
   cpp-just:
     name: cpp-just (${{ matrix.os }})
