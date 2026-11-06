@@ -1,0 +1,18 @@
+{
+  "description": "cpp-just with CMAKE_PRESET set: configure, build and test go through the presets",
+  "includes": ["cpp-just"],
+  "requires": {"linux": ["bash"], "darwin": ["bash"], "windows": ["pwsh"]},
+  "steps": [
+    {
+      "name": "just configure",
+      "cmd": ["just", "--set", "preset", "dev", "configure"],
+      "expect_output": "@PROJECT_DIR@/build/dev"
+    },
+    {"name": "just build", "cmd": ["just", "--set", "preset", "dev", "build"]},
+    {
+      "name": "just test",
+      "cmd": ["just", "--set", "preset", "dev", "test"],
+      "expect_output": "100% tests passed"
+    }
+  ]
+}

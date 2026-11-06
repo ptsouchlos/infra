@@ -478,14 +478,31 @@ class CmakeBuildScript(unittest.TestCase):
         cache = (src / "preset-out" / "CMakeCache.txt").read_text(encoding="utf-8")
         self.assertIn("PT_FROM_PRESET", cache)
 
-    def test_preset_with_mismatched_build_dir_fails(self):
-        src = self.generate("cpp-basic")
+    def test_preset_ignores_build_dir_and_installs_from_its_binary_dir(self):
+        src = self.generate("cpp-install")
         (src / "CMakePresets.json").write_text(
             '{"version": 6, "configurePresets": [{"name": "dev", "generator": '
             '"Ninja", "binaryDir": "${sourceDir}/preset-out"}]}', encoding="utf-8")
-        result = self.run_build(src, PRESET="dev", BUILD_DIR=str(src / "elsewhere"))
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("::error::", result.stdout + result.stderr)
+        prefix = self.tmp / "prefix"
+        result = self.run_build(src, PRESET="dev", BUILD_DIR=str(src / "elsewhere"),
+                                INSTALL_PREFIX=str(prefix))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((src / "elsewhere").exists())
+        self.assertTrue(any(prefix.rglob("*-config.cmake")))
+
+    def test_build_and_test_presets_run_when_present(self):
+        src = self.generate("cpp-basic")
+        (src / "CMakePresets.json").write_text(
+            '{"version": 6, "configurePresets": [{"name": "dev", "generator": "Ninja", '
+            '"binaryDir": "${sourceDir}/preset-out"}], '
+            '"buildPresets": [{"name": "dev", "configurePreset": "dev", "targets": ["core"]}], '
+            '"testPresets": [{"name": "dev", "configurePreset": "dev", '
+            '"filter": {"include": {"name": "no-such-test"}}}]}', encoding="utf-8")
+        result = self.run_build(src, PRESET="dev")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        # The build preset builds only `core`, and the test preset's filter matches no test.
+        self.assertFalse(any((src / "preset-out").glob("app*")))
+        self.assertIn("No tests were found", result.stdout + result.stderr)
 
 
 @unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
