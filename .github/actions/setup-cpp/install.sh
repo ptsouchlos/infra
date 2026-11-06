@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install a C++ toolchain on a GitHub runner and export CC/CXX.
 # Inputs arrive as environment variables so the action and the unit tests share one path:
-#   COMPILER (gcc|clang|appleclang|msvc), VERSION, CMAKE_VERSION, RUNNER_OS, GITHUB_ENV
+#   COMPILER (gcc|clang|appleclang|msvc), VERSION, CMAKE_VERSION, VCPKG, RUNNER_OS, GITHUB_ENV
 #   DRY_RUN=1 prints the commands instead of running them.
 set -euo pipefail
 
@@ -9,6 +9,7 @@ set -euo pipefail
 : "${RUNNER_OS:?RUNNER_OS is required}"
 : "${VERSION:=}"
 : "${CMAKE_VERSION:=}"
+: "${VCPKG:=false}"
 : "${GITHUB_ENV:=/dev/null}"
 : "${DRY_RUN:=0}"
 
@@ -84,4 +85,29 @@ if [ "${#pip_args[@]}" -gt 0 ]; then
         exit 1
     fi
     PIP_BREAK_SYSTEM_PACKAGES=1 run "${python_bin:-python3}" -m pip install --upgrade "${pip_args[@]}"
+fi
+
+# vcpkg: keep a VCPKG_ROOT the job already set, otherwise clone and bootstrap a fresh one. The
+# runner images' own copy is not used: it can predate a manifest's builtin-baseline, and macOS
+# images do not ship it.
+if [ "$VCPKG" = true ]; then
+    root="${VCPKG_ROOT:-}"
+    if [ -z "$root" ]; then
+        root="${RUNNER_TEMP:-/tmp}/vcpkg"
+        run git clone https://github.com/microsoft/vcpkg.git "$root"
+        if [ "$RUNNER_OS" = Windows ]; then
+            bat="$root/bootstrap-vcpkg.bat"
+            if command -v cygpath >/dev/null 2>&1; then
+                bat="$(cygpath -w "$bat")"
+            fi
+            run cmd.exe //c "$bat" -disableMetrics
+        else
+            run "$root/bootstrap-vcpkg.sh" -disableMetrics
+        fi
+    fi
+    # CMake reads $env{VCPKG_ROOT} on Windows too, so hand it a C:/... path, not /c/...
+    if command -v cygpath >/dev/null 2>&1; then
+        root="$(cygpath -m "$root")"
+    fi
+    echo "VCPKG_ROOT=$root" >>"$GITHUB_ENV"
 fi

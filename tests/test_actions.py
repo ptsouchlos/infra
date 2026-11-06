@@ -140,6 +140,37 @@ class SetupCppScript(unittest.TestCase):
         result, _ = self.run_install(RUNNER_OS="Linux", COMPILER="gcc")
         self.assertNotIn("cmake==", result.stdout)
 
+    def test_vcpkg_off_by_default(self):
+        result, gh_env = self.run_install(RUNNER_OS="Linux", COMPILER="gcc", VCPKG_ROOT="")
+        self.assertNotIn("vcpkg", result.stdout)
+        self.assertNotIn("VCPKG_ROOT", gh_env)
+
+    def test_vcpkg_clones_and_bootstraps_into_runner_temp(self):
+        result, gh_env = self.run_install(RUNNER_OS="Linux", COMPILER="gcc", VCPKG="true",
+                                          VCPKG_ROOT="", RUNNER_TEMP="/runner/temp")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("git clone https://github.com/microsoft/vcpkg.git /runner/temp/vcpkg",
+                      result.stdout)
+        self.assertIn("/runner/temp/vcpkg/bootstrap-vcpkg.sh -disableMetrics", result.stdout)
+        # On Windows, cygpath turns the path into C:/.../runner/temp/vcpkg.
+        self.assertRegex(gh_env, r"VCPKG_ROOT=.*/runner/temp/vcpkg\n")
+
+    def test_vcpkg_on_windows_bootstraps_with_the_batch_file(self):
+        result, gh_env = self.run_install(RUNNER_OS="Windows", COMPILER="msvc", VCPKG="true",
+                                          VCPKG_ROOT="", RUNNER_TEMP="/runner/temp")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("cmd.exe //c", result.stdout)
+        self.assertIn("bootstrap-vcpkg.bat -disableMetrics", result.stdout)
+        self.assertNotIn("bootstrap-vcpkg.sh", result.stdout)
+        self.assertIn("VCPKG_ROOT=", gh_env)
+
+    def test_vcpkg_keeps_an_existing_vcpkg_root(self):
+        result, gh_env = self.run_install(RUNNER_OS="Linux", COMPILER="gcc", VCPKG="true",
+                                          VCPKG_ROOT="/opt/vcpkg")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("git clone", result.stdout)
+        self.assertRegex(gh_env, r"VCPKG_ROOT=.*/opt/vcpkg\n")
+
 
 class SetupRustScript(unittest.TestCase):
     script = ACTIONS / "setup-rust" / "install.sh"
