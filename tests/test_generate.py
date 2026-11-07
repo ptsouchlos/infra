@@ -267,13 +267,16 @@ class GenerateTests(unittest.TestCase):
     def test_rust_project_imports_infra_just_files(self) -> None:
         generate.generate("rust-basic", self.out)
         text = (self.out / "justfile").read_text(encoding="utf-8")
+        self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/cargo.just", text)
         self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/format.just", text)
         self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/clippy.just", text)
         self.assertIn('name = "infra_rust_basic"', (self.out / "Cargo.toml").read_text(encoding="utf-8"))
 
     def test_rust_step_order(self) -> None:
         names = [s.name for s in generate.load_kind("rust-basic").steps]
-        self.assertEqual(names, ["format", "format check", "lint", "test"])
+        self.assertEqual(
+            names, ["build", "run", "just test", "format", "format check", "lint", "test"]
+        )
 
     def test_docs_kind_checks_generated_index(self) -> None:
         project = generate.generate("docs", self.out)
