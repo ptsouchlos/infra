@@ -115,6 +115,25 @@ Notes:
   `include(prevent_in_source_builds)` before `project()` still needs your own
   `list(APPEND CMAKE_MODULE_PATH ...)`.
 
+## Rust / just
+
+`rust/just/` holds recipes to `import` into your `justfile` (they need `just` 1.27.0 or newer):
+
+```just
+import 'infra/rust/just/cargo.just'
+import 'infra/rust/just/format.just'
+import 'infra/rust/just/clippy.just'
+```
+
+| File | Recipes |
+| --- | --- |
+| `cargo.just` | `build`, `build-release`, `run`, `run-release`, `test`, `check`, `clean` |
+| `format.just` | `format`, `format-check` |
+| `clippy.just` | `lint` |
+
+`build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Extra arguments pass
+through to cargo, so `just run -- --flag` hands `--flag` to your program.
+
 ## Tests
 
 `tests/` generates throwaway projects that exercise each module on Linux, macOS and Windows.
