@@ -32,6 +32,16 @@ test *args:
 check *args:
     cargo check --all-targets {{args}}
 
+[doc('List the binaries of every workspace package as "package<TAB>binary" (needs jq)')]
+[group('info')]
+list-bins:
+    cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | .name as $p | .targets[] | select(.kind | index("bin")) | "\($p)\t\(.name)"'
+
+[doc('List every target of every workspace package as "package<TAB>target<TAB>kinds" (needs jq)')]
+[group('info')]
+list-targets:
+    cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | .name as $p | .targets[] | "\($p)\t\(.name)\t\(.kind | join(","))"'
+
 [doc('Remove the target directory')]
 [group('build')]
 clean:
