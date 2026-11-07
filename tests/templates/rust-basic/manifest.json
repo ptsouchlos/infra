@@ -1,7 +1,10 @@
 {
-  "description": "cargo project driven through infra's rust just recipes (format, lint)",
+  "description": "cargo project driven through infra's rust just recipes (build, run, test, format, lint)",
   "requires": {"linux": ["bash"], "darwin": ["bash"], "windows": ["pwsh"]},
   "steps": [
+    {"name": "build", "cmd": ["just", "build"]},
+    {"name": "run", "cmd": ["just", "run"]},
+    {"name": "just test", "cmd": ["just", "test"]},
     {"name": "format", "cmd": ["just", "format"]},
     {"name": "format check", "cmd": ["cargo", "fmt", "--all", "--check"]},
     {"name": "lint", "cmd": ["just", "lint"]},

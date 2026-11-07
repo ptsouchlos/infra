@@ -115,6 +115,32 @@ Notes:
   `include(prevent_in_source_builds)` before `project()` still needs your own
   `list(APPEND CMAKE_MODULE_PATH ...)`.
 
+## Rust / just
+
+`rust/just/` holds recipes to `import` into your `justfile` (they need `just` 1.27.0 or newer):
+
+```just
+import 'infra/rust/just/cargo.just'
+import 'infra/rust/just/format.just'
+import 'infra/rust/just/clippy.just'
+```
+
+| File | Recipes |
+| --- | --- |
+| `cargo.just` | `build`, `build-release`, `run`, `run-release`, `test`, `check`, `clean`, `list-bins`, `list-targets` |
+| `format.just` | `format`, `format-check` |
+| `clippy.just` | `lint` |
+
+`build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Set `CARGO_BIN` to
+build or run a single binary of a multi-binary package (`CARGO_BIN=my-tool just run`); without it,
+cargo's own default applies, and `run` needs a `default-run` when the package has several binaries.
+Extra arguments pass through to cargo, so `just run -- --flag` hands `--flag` to your program and
+`just build --target <triple>` or `just build --example demo` work too.
+
+`list-bins` prints every binary in the workspace as `package<TAB>binary`, and `list-targets` prints
+every target (lib, bin, example, test, bench) with its kinds. Both read `cargo metadata` and need
+`jq`.
+
 ## Tests
 
 `tests/` generates throwaway projects that exercise each module on Linux, macOS and Windows.
