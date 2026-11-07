@@ -131,10 +131,11 @@ import 'infra/rust/just/clippy.just'
 | `format.just` | `format`, `format-check` |
 | `clippy.just` | `lint` |
 
-`build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Set `CARGO_TARGET` to
-a target triple to build, run, check or test for it (`CARGO_TARGET=x86_64-unknown-linux-musl just
-build-release`); output then lands in `target/<triple>/`. Extra arguments pass through to cargo, so
-`just run -- --flag` hands `--flag` to your program and `just build --bin my-tool` builds one binary.
+`build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Set `CARGO_BIN` to
+build or run a single binary of a multi-binary package (`CARGO_BIN=my-tool just run`); without it,
+cargo's own default applies, and `run` needs a `default-run` when the package has several binaries.
+Extra arguments pass through to cargo, so `just run -- --flag` hands `--flag` to your program and
+`just build --target <triple>` or `just build --example demo` work too.
 
 ## Tests
 
