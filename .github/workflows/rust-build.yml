@@ -1,0 +1,84 @@
+name: Rust build
+
+# Reusable workflow: builds and tests a Rust crate through infra's cargo.just recipes on every
+# combination of runner, toolchain and build type. The caller's justfile must import
+# infra/rust/just/cargo.just. The list inputs are JSON arrays, for example:
+#
+#   uses: ptsouchlos/infra/.github/workflows/rust-build.yml@v1
+#   with:
+#     os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+#     toolchain: '["stable", "nightly", "1.85"]'
+#     build-type: '["debug", "release"]'
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: JSON array of runner labels.
+        type: string
+        default: '["ubuntu-latest"]'
+      toolchain:
+        description: JSON array of toolchains (stable, beta, nightly or a version such as 1.85).
+        type: string
+        default: '["stable"]'
+      build-type:
+        description: JSON array of build types (debug, release).
+        type: string
+        default: '["debug"]'
+      allow-prerelease-failures:
+        description: Let beta and nightly legs fail without failing the run.
+        type: boolean
+        default: true
+      working-directory:
+        description: Directory containing the justfile and Cargo.toml.
+        type: string
+        default: "."
+      components:
+        description: Space-separated rustup components to install.
+        type: string
+        default: ""
+      targets:
+        description: Space-separated rustup targets to install.
+        type: string
+        default: ""
+      test:
+        description: Run `just test` after each build.
+        type: boolean
+        default: true
+      bin:
+        description: Build only this binary.
+        type: string
+        default: ""
+      args:
+        description: Extra cargo arguments for the build and test recipes.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.os }}, ${{ matrix.toolchain }}, ${{ matrix.build-type }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ inputs.allow-prerelease-failures && (matrix.toolchain == 'beta' || startsWith(matrix.toolchain, 'nightly')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os) }}
+        toolchain: ${{ fromJSON(inputs.toolchain) }}
+        build-type: ${{ fromJSON(inputs.build-type) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ptsouchlos/infra/.github/actions/setup-rust@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: ${{ inputs.components }}
+          targets: ${{ inputs.targets }}
+          just: "true"
+      - uses: ptsouchlos/infra/.github/actions/cargo-build@v1
+        with:
+          build-type: ${{ matrix.build-type }}
+          working-directory: ${{ inputs.working-directory }}
+          test: ${{ inputs.test }}
+          bin: ${{ inputs.bin }}
+          args: ${{ inputs.args }}

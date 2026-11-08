@@ -157,6 +157,7 @@ See [tests/README.md](tests/README.md).
 | `cmake-build` | `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args`, `test`, `install-prefix`, `ccache`, `cpm-cache` | configure, build, ctest, optional install |
 | `setup-rust` | `toolchain`, `components`, `targets`, `just` | rustup toolchain and targets (a Linux `-musl` target also installs `musl-tools`), cargo cache, optional `just` |
 | `cargo-release` | `target`, `bin`, `name`, `archive`, `working-directory`, `cargo-args`, `out-dir`, `release` | `cargo build --release` for one target, package (tar.gz, zip or the bare binary), write a `.sha256`, optionally upload to the tag's release |
+| `cargo-build` | `build-type`, `working-directory`, `test`, `bin`, `args` | `just build` (debug) or `just build-release`, then `just test` (with `--release` for release); needs `rust/just/cargo.just` imported and `just` installed |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
 | `update-infra` | `tag`, `token`, `branch` | moves the repo's infra embeds (and `@vN` action refs on a major) to a release, then opens or updates a PR |
@@ -222,6 +223,30 @@ jobs:
           bin: my-tool
           release: ${{ startsWith(github.ref, 'refs/tags/') }}
 ```
+
+To build and test across runners, toolchains and build types, call the reusable `rust-build.yml`
+workflow. The three lists are JSON arrays, and every combination is one job. The repo's justfile
+must import `infra/rust/just/cargo.just`:
+
+```yaml
+jobs:
+  rust:
+    uses: ptsouchlos/infra/.github/workflows/rust-build.yml@v1
+    with:
+      os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+      toolchain: '["stable", "nightly", "1.85"]'
+      build-type: '["debug", "release"]'
+```
+
+| Input | Default | Does |
+| --- | --- | --- |
+| `os`, `toolchain`, `build-type` | `["ubuntu-latest"]`, `["stable"]`, `["debug"]` | the matrix axes |
+| `allow-prerelease-failures` | `true` | a `beta` or `nightly` leg can fail without failing the run |
+| `working-directory`, `components`, `targets` | `.`, none, none | where the crate is, and what `setup-rust` installs |
+| `test`, `bin`, `args` | `true`, none, none | run `just test`, build one binary, extra cargo arguments |
+
+Add repo-specific steps, such as installing system libraries, by using `setup-rust` and
+`cargo-build` in your own matrix instead.
 
 Notes:
 - `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.

@@ -43,8 +43,8 @@ class ActionStructure(unittest.TestCase):
         found = {f.parent.name for f in action_files()}
         self.assertEqual(
             found,
-            {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "build-docs",
-             "update-infra", "cargo-release"},
+            {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
+             "build-docs", "update-infra", "cargo-release"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -606,6 +606,128 @@ class CargoCheckRealScript(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             for group in ("fmt", "clippy", "test"):
                 self.assertIn(f"::group::{group}", result.stdout)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake just on PATH")
+class CargoBuildScript(unittest.TestCase):
+    script = ACTIONS / "cargo-build" / "run.sh"
+
+    def run_build(self, missing="", **env):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            calls = d / "calls"
+            just = d / "just"
+            just.write_text(
+                "#!/usr/bin/env bash\n"
+                'if [ "$1" = "--show" ]; then\n'
+                f'  [ "$2" = "{missing}" ] && exit 1\n'
+                "  exit 0\n"
+                "fi\n"
+                f'echo "$*${{CARGO_BIN:+ [CARGO_BIN=$CARGO_BIN]}}" >> "{calls}"\n')
+            just.chmod(0o755)
+            env = {"PATH": f"{d}{os.pathsep}{os.environ['PATH']}", **env}
+            result = run_script(self.script, env)
+            lines = calls.read_text().splitlines() if calls.exists() else []
+            return result, lines
+
+    def test_debug_builds_and_tests_by_default(self):
+        result, calls = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, ["build", "test"])
+
+    def test_release_uses_the_release_recipe_and_tests_with_release(self):
+        result, calls = self.run_build(BUILD_TYPE="release")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, ["build-release", "test --release"])
+
+    def test_args_go_to_the_build_and_the_test(self):
+        _, calls = self.run_build(ARGS="--workspace --all-features")
+        self.assertEqual(calls, ["build --workspace --all-features",
+                                 "test --workspace --all-features"])
+
+    def test_release_puts_its_flag_before_the_args(self):
+        _, calls = self.run_build(BUILD_TYPE="release", ARGS="--workspace")
+        self.assertEqual(calls, ["build-release --workspace", "test --release --workspace"])
+
+    def test_tests_can_be_switched_off(self):
+        _, calls = self.run_build(RUN_TESTS="false")
+        self.assertEqual(calls, ["build"])
+
+    def test_bin_reaches_the_recipes_as_cargo_bin(self):
+        _, calls = self.run_build(BIN="my-tool")
+        self.assertEqual(calls[0], "build [CARGO_BIN=my-tool]")
+
+    def test_unknown_build_type_fails_before_running_anything(self):
+        result, calls = self.run_build(BUILD_TYPE="profile")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("debug or release", result.stderr)
+        self.assertEqual(calls, [])
+
+    def test_missing_recipe_says_to_import_cargo_just(self):
+        result, calls = self.run_build(missing="build-release", BUILD_TYPE="release")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cargo.just", result.stderr)
+        self.assertEqual(calls, [])
+
+
+@unittest.skipUnless(shutil.which("cargo") and shutil.which("just"), "cargo and just are required")
+class CargoBuildRealScript(unittest.TestCase):
+    script = ACTIONS / "cargo-build" / "run.sh"
+
+    def test_rust_basic_builds_and_tests_in_both_build_types(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "my project"
+            subprocess.run(
+                [sys.executable, str(ROOT / "tests" / "generate.py"), "rust-basic", str(out),
+                 "--infra", str(ROOT)],
+                check=True, capture_output=True, text=True)
+            for build_type in ("debug", "release"):
+                with self.subTest(build_type=build_type):
+                    result = run_script(self.script, {"WORKING_DIRECTORY": str(out),
+                                                      "BUILD_TYPE": build_type})
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn(f"::group::build ({build_type})", result.stdout)
+                    self.assertIn(f"::group::test ({build_type})", result.stdout)
+            self.assertTrue((out / "target" / "release").is_dir())
+
+
+class RustBuildWorkflow(unittest.TestCase):
+    path = ROOT / ".github" / "workflows" / "rust-build.yml"
+
+    def setUp(self):
+        self.text = self.path.read_text(encoding="utf-8")
+
+    def test_is_a_reusable_workflow_with_the_three_matrix_inputs(self):
+        self.assertRegex(self.text, r"(?m)^  workflow_call:")
+        for name in ("os", "toolchain", "build-type"):
+            with self.subTest(input=name):
+                self.assertRegex(self.text, rf"(?m)^      {name}:")
+                self.assertIn(f"{name}: ${{{{ fromJSON(inputs.{name}) }}}}", self.text)
+
+    def test_matrix_defaults_are_single_leg_json_arrays(self):
+        self.assertIn("""default: '["ubuntu-latest"]'""", self.text)
+        self.assertIn("""default: '["stable"]'""", self.text)
+        self.assertIn("""default: '["debug"]'""", self.text)
+
+    def test_one_failing_leg_does_not_cancel_the_rest(self):
+        self.assertRegex(self.text, r"(?m)^      fail-fast: false")
+
+    def test_only_prerelease_toolchains_may_fail(self):
+        self.assertIn("inputs.allow-prerelease-failures", self.text)
+        self.assertIn("matrix.toolchain == 'beta'", self.text)
+        self.assertIn("startsWith(matrix.toolchain, 'nightly')", self.text)
+
+    def test_runs_setup_rust_with_just_then_cargo_build(self):
+        setup = self.text.index("actions/setup-rust@v")
+        build = self.text.index("actions/cargo-build@v")
+        self.assertLess(setup, build)
+        self.assertIn('just: "true"', self.text)
+        self.assertIn("build-type: ${{ matrix.build-type }}", self.text)
+
+    def test_third_party_actions_are_version_pinned(self):
+        for ref in re.findall(r"(?m)^\s*-?\s*uses:\s*(\S+)", self.text):
+            with self.subTest(uses=ref):
+                self.assertRegex(ref, r"@v\d")
 
 
 @unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
