@@ -44,6 +44,10 @@ on:
         description: Run `just test` after each build.
         type: boolean
         default: true
+      lfs:
+        description: Fetch Git LFS files when checking out.
+        type: boolean
+        default: false
       bin:
         description: Build only this binary.
         type: string
@@ -69,6 +73,8 @@ jobs:
         build-type: ${{ fromJSON(inputs.build-type) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: ${{ inputs.lfs }}
       - uses: ptsouchlos/infra/.github/actions/setup-rust@v1
         with:
           toolchain: ${{ matrix.toolchain }}

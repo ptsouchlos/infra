@@ -717,6 +717,11 @@ class RustBuildWorkflow(unittest.TestCase):
         self.assertIn("matrix.toolchain == 'beta'", self.text)
         self.assertIn("startsWith(matrix.toolchain, 'nightly')", self.text)
 
+    def test_lfs_input_defaults_off_and_reaches_the_checkout(self):
+        self.assertRegex(self.text, r"(?ms)^      lfs:\n.*?default: false")
+        checkout = self.text.index("actions/checkout@v")
+        self.assertIn("lfs: ${{ inputs.lfs }}", self.text[checkout:self.text.index("setup-rust@v")])
+
     def test_runs_setup_rust_with_just_then_cargo_build(self):
         setup = self.text.index("actions/setup-rust@v")
         build = self.text.index("actions/cargo-build@v")
