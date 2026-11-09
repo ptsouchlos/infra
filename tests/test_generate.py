@@ -273,6 +273,10 @@ class GenerateTests(unittest.TestCase):
         self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/clippy.just", text)
         self.assertIn('name = "infra_rust_basic"', (self.out / "Cargo.toml").read_text(encoding="utf-8"))
 
+    def test_rust_project_is_private_so_cargo_deny_skips_its_license(self) -> None:
+        generate.generate("rust-basic", self.out)
+        self.assertIn("publish = false", (self.out / "Cargo.toml").read_text(encoding="utf-8"))
+
     def test_rust_step_order(self) -> None:
         names = [s.name for s in generate.load_kind("rust-basic").steps]
         self.assertEqual(
