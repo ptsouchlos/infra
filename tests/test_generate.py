@@ -268,6 +268,7 @@ class GenerateTests(unittest.TestCase):
         generate.generate("rust-basic", self.out)
         text = (self.out / "justfile").read_text(encoding="utf-8")
         self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/cargo.just", text)
+        self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/deps.just", text)
         self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/format.just", text)
         self.assertIn(generate.INFRA_DIR.as_posix() + "/rust/just/clippy.just", text)
         self.assertIn('name = "infra_rust_basic"', (self.out / "Cargo.toml").read_text(encoding="utf-8"))

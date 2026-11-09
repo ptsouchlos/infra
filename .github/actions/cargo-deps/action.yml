@@ -1,0 +1,36 @@
+name: Check Rust dependencies
+description: Run cargo-deny (licenses, bans, sources) and cargo-machete (unused dependencies). Linux runners only, because cargo-deny-action is a Docker action.
+inputs:
+  deny:
+    description: Run cargo-deny.
+    default: "true"
+  deny-checks:
+    description: Space-separated cargo-deny checks. Advisories are off by default because they fail pull requests for problems the change did not cause; add advisories here, or run it on a schedule.
+    default: licenses bans sources
+  deny-args:
+    description: Arguments for cargo-deny before the check command.
+    default: --all-features
+  machete:
+    description: Run cargo-machete.
+    default: "true"
+  machete-args:
+    description: Extra arguments for cargo-machete.
+    default: ""
+  working-directory:
+    description: Directory containing Cargo.toml, relative to the repository root.
+    default: "."
+runs:
+  using: composite
+  steps:
+    - name: cargo-deny
+      if: inputs.deny == 'true'
+      uses: EmbarkStudios/cargo-deny-action@v2
+      with:
+        command: check ${{ inputs.deny-checks }}
+        arguments: ${{ inputs.deny-args }}
+        manifest-path: ${{ inputs.working-directory }}/Cargo.toml
+    - name: cargo-machete
+      if: inputs.machete == 'true'
+      uses: bnjbvr/cargo-machete@v0.9.2
+      with:
+        args: ${{ inputs.machete-args }} ${{ inputs.working-directory }}

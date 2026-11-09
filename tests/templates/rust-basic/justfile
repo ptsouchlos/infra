@@ -2,5 +2,6 @@ set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 set shell := ["bash", "-c"]
 
 import '@INFRA_DIR@/rust/just/cargo.just'
+import '@INFRA_DIR@/rust/just/deps.just'
 import '@INFRA_DIR@/rust/just/format.just'
 import '@INFRA_DIR@/rust/just/clippy.just'
