@@ -1,0 +1,30 @@
+name: Build Rust
+description: Build and test a Rust crate through infra's cargo.just recipes, in debug or release.
+inputs:
+  build-type:
+    description: debug runs `just build`; release runs `just build-release` and tests with --release.
+    default: debug
+  working-directory:
+    description: Directory containing the justfile and Cargo.toml.
+    default: "."
+  test:
+    description: Run `just test` after the build.
+    default: "true"
+  bin:
+    description: Build only this binary (sets CARGO_BIN for the recipes).
+    default: ""
+  args:
+    description: Extra cargo arguments for the build and test recipes, space-separated (no embedded spaces within one argument, so use --features=a,b).
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Build
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        BUILD_TYPE: ${{ inputs.build-type }}
+        RUN_TESTS: ${{ inputs.test }}
+        BIN: ${{ inputs.bin }}
+        ARGS: ${{ inputs.args }}
+      run: bash "${{ github.action_path }}/run.sh"

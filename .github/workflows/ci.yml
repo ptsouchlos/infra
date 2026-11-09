@@ -353,6 +353,31 @@ jobs:
           ls extracted
           ./extracted/${{ steps.bin.outputs.name }}*
 
+  # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
+  rust-build:
+    name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build-type: [debug, release]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: ""
+          just: "true"
+      - uses: ./.github/actions/cargo-build
+        with:
+          build-type: ${{ matrix.build-type }}
+          working-directory: _demo/rust-basic
+
   docs:
     runs-on: ubuntu-latest
     steps:
