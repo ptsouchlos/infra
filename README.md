@@ -244,6 +244,7 @@ jobs:
 | `allow-prerelease-failures` | `true` | a `beta` or `nightly` leg can fail without failing the run |
 | `working-directory`, `components`, `targets` | `.`, none, none | where the crate is, and what `setup-rust` installs |
 | `test`, `bin`, `args` | `true`, none, none | run `just test`, build one binary, extra cargo arguments |
+| `lfs` | `false` | fetch Git LFS files when checking out |
 
 Add repo-specific steps, such as installing system libraries, by using `setup-rust` and
 `cargo-build` in your own matrix instead.
