@@ -754,6 +754,58 @@ jobs:
           assert all(len(a["sha256"]) == 64 and a["size"] > 0 for a in m["assets"]), m
           EOF
 
+  publish-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Make throwaway assets and a stub gh
+        shell: bash
+        run: |
+          for spec in "deb linux-x86_64.deb" "dmg macos-aarch64.dmg"; do
+            set -- $spec
+            mkdir -p "assets/$1"
+            file="demo-1.2.3-$2"
+            echo "$file" > "assets/$1/$file"
+            (cd "assets/$1" && sha256sum "$file" > "$file.sha256")
+          done
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          cat > "$RUNNER_TEMP/fakebin/gh" <<'EOF'
+          #!/usr/bin/env bash
+          if [ "$1 $2" = "release view" ]; then exit 1; fi
+          echo "$*" >> "$RUNNER_TEMP/gh-calls"
+          EOF
+          chmod +x "$RUNNER_TEMP/fakebin/gh"
+          echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/release-manifest
+        id: manifest
+        with:
+          assets-dir: assets
+          name: demo
+          version: 1.2.3
+      - uses: ./.github/actions/publish-release
+        with:
+          assets-dir: assets
+          manifest: ${{ steps.manifest.outputs.manifest }}
+          tag: v1.2.3
+          notes: "Unsigned macOS build: right-click Open."
+      - name: Check the release sequence
+        shell: bash
+        run: |
+          cat "$RUNNER_TEMP/gh-calls"
+          python3 - "$RUNNER_TEMP/gh-calls" <<'EOF'
+          import sys
+          calls = open(sys.argv[1]).read().splitlines()
+          assert len(calls) == 3, calls
+          assert calls[0].startswith("release create v1.2.3 --draft --verify-tag"), calls[0]
+          assert "--generate-notes" in calls[0] and "right-click Open" in calls[0], calls[0]
+          assert calls[1].startswith("release upload v1.2.3 --clobber "), calls[1]
+          for name in ("demo-1.2.3-linux-x86_64.deb", "demo-1.2.3-linux-x86_64.deb.sha256",
+                       "demo-1.2.3-macos-aarch64.dmg", "demo-1.2.3-macos-aarch64.dmg.sha256",
+                       "demo-1.2.3-manifest.json"):
+              assert name in calls[1], (name, calls[1])
+          assert calls[2] == "release edit v1.2.3 --draft=false", calls[2]
+          EOF
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
