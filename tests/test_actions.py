@@ -45,7 +45,7 @@ class ActionStructure(unittest.TestCase):
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
              "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
-             "package-appimage", "package-flatpak", "package-macos", "package-windows"},
+             "package-appimage", "package-flatpak", "package-macos", "package-windows", "release-manifest"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -1702,6 +1702,146 @@ class PackageWindowsScript(unittest.TestCase):
         r = self.run_package(BIN_DIR="/nonexistent/bins")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("bin-dir", r.stdout + r.stderr)
+
+
+class ReleaseManifestScript(unittest.TestCase):
+    script = ACTIONS / "release-manifest" / "manifest.py"
+
+    def run_manifest(self, files, checksums=True, **env):
+        """files: {relative path: bytes}. Sets self.manifest (parsed JSON or None) and
+        self.out_files; returns the process result."""
+        import hashlib
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            assets = d / "assets"
+            for rel, data in files.items():
+                path = assets / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+                if checksums and not rel.endswith(".sha256"):
+                    digest = hashlib.sha256(data).hexdigest()
+                    path.with_name(path.name + ".sha256").write_text(f"{digest}  {path.name}\n")
+            assets.mkdir(exist_ok=True)
+            out = d / "dist"
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            full = {"ASSETS_DIR": str(assets), "NAME": "tool", "VERSION": "1.2.3",
+                    "COMMIT": "abc123", "OUT_DIR": str(out), "GITHUB_OUTPUT": str(gh_output),
+                    "CREATED": "2026-10-20T12:00:00Z", **env}
+            result = subprocess.run([sys.executable, "-I", str(self.script)],
+                                    env={**os.environ, **full}, capture_output=True, text=True)
+            target = out / f"tool-{full['VERSION']}-manifest.json"
+            self.manifest = json.loads(target.read_text()) if target.exists() else None
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            self.tmp_assets = str(assets)
+            return result
+
+    FILES = {
+        "linux-deb/tool-1.2.3-linux-x86_64.deb": b"deb",
+        "linux-rpm/tool-1.2.3-linux-x86_64.rpm": b"rpm",
+        "appimage/tool-1.2.3-linux-aarch64.AppImage": b"appimage",
+        "flatpak/tool-1.2.3-linux-x86_64.flatpak": b"flatpak",
+        "mac/tool-1.2.3-macos-aarch64.dmg": b"dmg",
+        "win/tool-1.2.3-windows-x86_64.msi": b"msi!",
+        "win-zip/tool-1.2.3-windows-x86_64.zip": b"zip",
+        "tar/tool-1.2.3-linux-x86_64.tar.gz": b"targz",
+    }
+
+    def asset(self, name):
+        return next(a for a in self.manifest["assets"] if a["file"] == name)
+
+    def test_writes_the_manifest_header(self):
+        r = self.run_manifest(self.FILES)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.out_files, ["tool-1.2.3-manifest.json"])
+        m = self.manifest
+        self.assertEqual((m["schema"], m["name"], m["version"], m["prerelease"]),
+                         (1, "tool", "1.2.3", False))
+        self.assertEqual((m["commit"], m["created"]), ("abc123", "2026-10-20T12:00:00Z"))
+        self.assertIn("manifest=", self.gh_output)
+
+    def test_describes_each_format(self):
+        self.run_manifest(self.FILES)
+        expected = {
+            "tool-1.2.3-linux-x86_64.deb": ("linux", "x86_64", "deb", "installer"),
+            "tool-1.2.3-linux-x86_64.rpm": ("linux", "x86_64", "rpm", "installer"),
+            "tool-1.2.3-linux-aarch64.AppImage": ("linux", "aarch64", "appimage", "installer"),
+            "tool-1.2.3-linux-x86_64.flatpak": ("linux", "x86_64", "flatpak", "installer"),
+            "tool-1.2.3-macos-aarch64.dmg": ("macos", "aarch64", "dmg", "installer"),
+            "tool-1.2.3-windows-x86_64.msi": ("windows", "x86_64", "msi", "installer"),
+            "tool-1.2.3-windows-x86_64.zip": ("windows", "x86_64", "zip", "archive"),
+            "tool-1.2.3-linux-x86_64.tar.gz": ("linux", "x86_64", "tar.gz", "archive"),
+        }
+        for file, fields in expected.items():
+            with self.subTest(file=file):
+                a = self.asset(file)
+                self.assertEqual((a["os"], a["arch"], a["format"], a["kind"]), fields)
+
+    def test_size_and_sha256_match_the_file(self):
+        import hashlib
+        self.run_manifest(self.FILES)
+        a = self.asset("tool-1.2.3-windows-x86_64.msi")
+        self.assertEqual(a["size"], 4)
+        self.assertEqual(a["sha256"], hashlib.sha256(b"msi!").hexdigest())
+        self.assertIs(a["signed"], False)
+
+    def test_assets_are_sorted_and_checksum_files_are_not_assets(self):
+        self.run_manifest(self.FILES)
+        names = [a["file"] for a in self.manifest["assets"]]
+        self.assertEqual(names, sorted(names))
+        self.assertEqual(len(names), len(self.FILES))
+
+    def test_a_prerelease_version_is_flagged_and_a_variant_is_accepted(self):
+        r = self.run_manifest({"a/tool-1.2.3-rc.1-linux-x86_64-musl.tar.gz": b"x"},
+                              VERSION="1.2.3-rc.1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIs(self.manifest["prerelease"], True)
+        self.assertEqual(self.manifest["assets"][0]["arch"], "x86_64")
+
+    def test_signed_flag_is_recorded(self):
+        self.run_manifest(self.FILES, SIGNED="true")
+        self.assertTrue(all(a["signed"] for a in self.manifest["assets"]))
+
+    def test_missing_checksum_fails(self):
+        r = self.run_manifest(self.FILES, checksums=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(".sha256", r.stdout + r.stderr)
+        self.assertEqual(self.out_files, [])
+
+    def test_checksum_mismatch_fails(self):
+        files = dict(self.FILES)
+        files["mac/tool-1.2.3-macos-aarch64.dmg.sha256"] = b"0" * 64 + b"  tool-1.2.3-macos-aarch64.dmg\n"
+        r = self.run_manifest({**files})
+        # the helper only writes checksums for non-.sha256 files, so the planted one stands
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("does not match", r.stdout + r.stderr)
+
+    def test_misnamed_asset_fails(self):
+        for name in ("tool-1.2.3-linux-amd64.deb", "other-1.2.3-linux-x86_64.deb",
+                     "tool-1.2.3-beos-x86_64.deb", "tool-1.2.3-linux-x86_64"):
+            with self.subTest(name=name):
+                r = self.run_manifest({name: b"x"})
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("::error::", r.stdout + r.stderr)
+
+    def test_duplicate_file_names_fail(self):
+        r = self.run_manifest({"a/tool-1.2.3-linux-x86_64.deb": b"1",
+                               "b/tool-1.2.3-linux-x86_64.deb": b"2"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("twice", r.stdout + r.stderr)
+
+    def test_empty_assets_dir_fails(self):
+        r = self.run_manifest({})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no assets", r.stdout + r.stderr)
+
+    def test_a_previous_manifest_in_the_directory_is_ignored(self):
+        files = {**self.FILES, "m/tool-1.2.3-manifest.json": b"{}"}
+        r = self.run_manifest(files)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(len(self.manifest["assets"]), len(self.FILES))
 
 
 if __name__ == "__main__":
