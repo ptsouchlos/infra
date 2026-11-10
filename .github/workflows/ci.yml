@@ -749,7 +749,8 @@ jobs:
           m = json.load(open(sys.argv[1]))
           assert m["schema"] == 1 and m["version"] == "1.2.3" and m["prerelease"] is False, m
           assert m["commit"], m
-          assert [a["format"] for a in m["assets"]] == ["deb", "dmg", "msi", "tar.gz"], m
+          assert sorted(a["format"] for a in m["assets"]) == ["deb", "dmg", "msi", "tar.gz"], m
+          assert [a["file"] for a in m["assets"]] == sorted(a["file"] for a in m["assets"]), m
           assert all(len(a["sha256"]) == 64 and a["size"] > 0 for a in m["assets"]), m
           EOF
 
