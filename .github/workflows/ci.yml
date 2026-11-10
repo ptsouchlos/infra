@@ -359,6 +359,79 @@ jobs:
           ls "$dir"
           "$dir"/${{ steps.bin.outputs.name }}*
 
+  # package-nfpm on the demo crate: the deb installs on the runner and the rpm in a Fedora
+  # container, and the packaged binary runs from /usr/bin in both.
+  package-nfpm:
+    name: package-nfpm (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, arch: x86_64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: aarch64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: ""
+          targets: ${{ matrix.target }}
+      - name: Read the binary name
+        id: bin
+        shell: bash
+        run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/cargo-release
+        id: release
+        with:
+          target: ${{ matrix.target }}
+          bin: ${{ steps.bin.outputs.name }}
+          working-directory: _demo/rust-basic
+      - name: Write the nFPM config
+        shell: bash
+        run: |
+          cat > nfpm-demo.yaml <<'EOF'
+          name: ${{ steps.bin.outputs.name }}
+          arch: ${PKG_ARCH}
+          version: ${PKG_VERSION}
+          maintainer: infra CI <noreply@example.com>
+          description: package-nfpm fixture
+          license: LicenseRef-proprietary
+          contents:
+            - src: ${PKG_BIN_DIR}/${{ steps.bin.outputs.name }}
+              dst: /usr/bin/${{ steps.bin.outputs.name }}
+              expand: true
+          EOF
+      - uses: ./.github/actions/package-nfpm
+        id: pkg
+        with:
+          config: nfpm-demo.yaml
+          bin-dir: ${{ steps.release.outputs.bin-dir }}
+          version: 1.2.3
+          arch: ${{ matrix.arch }}
+          name: demo-1.2.3-linux-${{ matrix.arch }}
+      - name: Verify the checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum -c demo-1.2.3-linux-${{ matrix.arch }}.deb.sha256
+          sha256sum -c demo-1.2.3-linux-${{ matrix.arch }}.rpm.sha256
+      - name: Install the deb and run it
+        shell: bash
+        run: |
+          sudo apt-get install -y ./dist/demo-1.2.3-linux-${{ matrix.arch }}.deb
+          dpkg-deb -I dist/demo-1.2.3-linux-${{ matrix.arch }}.deb
+          ${{ steps.bin.outputs.name }}
+      - name: Install the rpm in Fedora and run it
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" fedora:latest bash -c \
+            'dnf install -y --nogpgcheck /dist/demo-1.2.3-linux-${{ matrix.arch }}.rpm && ${{ steps.bin.outputs.name }}'
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
