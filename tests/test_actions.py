@@ -44,7 +44,8 @@ class ActionStructure(unittest.TestCase):
         self.assertEqual(
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
-             "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm"},
+             "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
+             "package-appimage"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -1098,6 +1099,197 @@ class PackageNfpmScript(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("::error::", r.stdout + r.stderr)
         self.assertEqual(calls, [])
+
+
+PNG_64 = (  # a valid 64x64 PNG header is all package.sh reads
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x40\x00\x00\x00\x40\x08\x02\x00\x00\x00")
+
+
+@unittest.skipIf(sys.platform == "win32", "uses bash scripts")
+class PackageAppimageInstallScript(unittest.TestCase):
+    script = ACTIONS / "package-appimage" / "install.sh"
+
+    def run_install(self, **env):
+        return run_script(self.script, {"DRY_RUN": "1", "TOOL_VERSION": "1.9.1", **env})
+
+    def test_x64_runner_fetches_the_x86_64_tool_with_its_checksum(self):
+        r = self.run_install(RUNNER_ARCH="X64")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("1.9.1/appimagetool-x86_64.AppImage", r.stdout)
+        self.assertIn("sha256 ed4ce84f", r.stdout)
+
+    def test_arm64_runner_fetches_the_aarch64_tool(self):
+        r = self.run_install(RUNNER_ARCH="ARM64")
+        self.assertIn("1.9.1/appimagetool-aarch64.AppImage", r.stdout)
+        self.assertIn("sha256 f0837e74", r.stdout)
+
+    def test_other_version_needs_a_checksum(self):
+        r = self.run_install(RUNNER_ARCH="X64", TOOL_VERSION="1.9.0")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("appimagetool-sha256", r.stdout + r.stderr)
+
+    def test_other_version_with_a_checksum_is_accepted(self):
+        r = self.run_install(RUNNER_ARCH="X64", TOOL_VERSION="1.9.0", TOOL_SHA256="ab" * 32)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("1.9.0/appimagetool-x86_64.AppImage", r.stdout)
+
+    def test_unknown_runner_architecture_fails(self):
+        r = self.run_install(RUNNER_ARCH="PPC")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses bash scripts")
+class PackageAppimageScript(unittest.TestCase):
+    script = ACTIONS / "package-appimage" / "package.sh"
+
+    def run_package(self, desktop="[Desktop Entry]\nName=Tool\nExec=tool\nIcon=tool\n",
+                    icon=PNG_64, **env):
+        """Run package.sh against a fake appimagetool that snapshots the AppDir it is given.
+
+        Sets self.tree (sorted relative file paths), self.files (path -> text), self.args
+        (the appimagetool command line) and self.out_files.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            tool = fake / "appimagetool"
+            tool.write_text(
+                '#!/usr/bin/env bash\n'
+                f'echo "$ARCH $*" > "{d}/args"\n'
+                'args=("$@"); n=${#args[@]}\n'
+                f'cp -a "${{args[$((n-2))]}}" "{d}/snapshot"\n'
+                'echo image > "${args[$((n-1))]}"\n')
+            tool.chmod(0o755)
+            binaries = d / "bins"
+            binaries.mkdir()
+            (binaries / "tool").write_text("#!/bin/sh\n")
+            (binaries / "toolctl").write_text("#!/bin/sh\n")
+            (d / "tool.desktop").write_text(desktop)
+            if icon is not None:
+                (d / "icon.png").write_bytes(icon)
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            out = d / "dist"
+            full = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                    "BIN_DIR": str(binaries), "EXE": "tool", "DESKTOP_FILE": str(d / "tool.desktop"),
+                    "ICON": str(d / "icon.png"), "NAME": "tool-1.2.3-linux-x86_64",
+                    "ARCH": "x86_64", "OUT_DIR": str(out), "GITHUB_OUTPUT": str(gh_output), **env}
+            result = run_script(self.script, full)
+            snap = d / "snapshot"
+            self.tree = sorted(str(p.relative_to(snap)) for p in snap.rglob("*")
+                               if p.is_file()) if snap.exists() else []
+            self.files = {str(p.relative_to(snap)): p.read_text(errors="replace")
+                          for p in snap.rglob("*") if p.is_file()} if snap.exists() else {}
+            self.args = (d / "args").read_text().strip() if (d / "args").exists() else ""
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            return result
+
+    def test_builds_the_image_and_checksum(self):
+        r = self.run_package()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.out_files, ["tool-1.2.3-linux-x86_64.AppImage",
+                                          "tool-1.2.3-linux-x86_64.AppImage.sha256"])
+        self.assertIn("asset=", self.gh_output)
+        self.assertIn("checksum=", self.gh_output)
+
+    def test_appdir_layout(self):
+        self.run_package()
+        for path in ("AppRun", ".DirIcon", "tool.png", "tool.desktop", "usr/bin/tool",
+                     "usr/bin/toolctl", "usr/share/applications/tool.desktop",
+                     "usr/share/icons/hicolor/64x64/apps/tool.png"):
+            self.assertIn(path, self.tree)
+
+    def test_default_apprun_starts_the_named_exe(self):
+        self.run_package()
+        self.assertIn('usr/bin/tool"', self.files["AppRun"])
+        self.assertNotIn("@EXE@", self.files["AppRun"])
+
+    def test_custom_apprun_is_copied_as_is(self):
+        with tempfile.TemporaryDirectory() as d:
+            custom = Path(d) / "AppRun"
+            custom.write_text("#!/bin/sh\necho custom\n")
+            self.run_package(APPRUN=str(custom))
+        self.assertEqual(self.files["AppRun"], "#!/bin/sh\necho custom\n")
+
+    def test_without_metainfo_skips_appstream_validation(self):
+        self.run_package()
+        self.assertIn("--no-appstream", self.args)
+
+    def test_with_metainfo_it_is_packaged_and_validated(self):
+        with tempfile.TemporaryDirectory() as d:
+            meta = Path(d) / "io.example.Tool.metainfo.xml"
+            meta.write_text("<component/>")
+            self.run_package(METAINFO=str(meta))
+        self.assertIn("usr/share/metainfo/io.example.Tool.metainfo.xml", self.tree)
+        self.assertNotIn("--no-appstream", self.args)
+
+    def test_arch_is_passed_to_appimagetool(self):
+        self.run_package(ARCH="aarch64")
+        self.assertTrue(self.args.startswith("aarch64 "), self.args)
+
+    def test_pinned_runtime_is_passed_when_installed(self):
+        self.run_package(APPIMAGE_RUNTIME_DIR="/pinned")
+        self.assertIn("--runtime-file /pinned/runtime-x86_64", self.args)
+
+    def test_exe_must_be_in_bin_dir(self):
+        r = self.run_package(EXE="missing")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+        self.assertEqual(self.args, "")
+
+    def test_desktop_file_needs_an_icon_line(self):
+        r = self.run_package(desktop="[Desktop Entry]\nName=Tool\n")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("Icon=", r.stdout + r.stderr)
+
+    def test_icon_must_be_a_png(self):
+        r = self.run_package(icon=b"not a png at all, but long enough to read")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.args, "")
+
+    def test_unsupported_arch_fails(self):
+        r = self.run_package(ARCH="riscv64")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.args, "")
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a POSIX shell")
+class PackageAppimageAppRun(unittest.TestCase):
+    template = ACTIONS / "package-appimage" / "AppRun"
+
+    def run_apprun(self, args=(), argv0=None):
+        with tempfile.TemporaryDirectory() as d:
+            appdir = Path(d) / "app"
+            (appdir / "usr" / "bin").mkdir(parents=True)
+            for name in ("tool", "toolctl"):
+                exe = appdir / "usr" / "bin" / name
+                exe.write_text(f'#!/bin/sh\necho "{name} $*"\n')
+                exe.chmod(0o755)
+            apprun = appdir / "AppRun"
+            apprun.write_text(self.template.read_text().replace("@EXE@", "tool"))
+            apprun.chmod(0o755)
+            env = {**os.environ}
+            env.pop("ARGV0", None)
+            if argv0:
+                env["ARGV0"] = argv0
+            return subprocess.run(["sh", str(apprun), *args], env=env,
+                                  capture_output=True, text=True).stdout.strip()
+
+    def test_starts_the_main_exe_by_default(self):
+        self.assertEqual(self.run_apprun(["a", "b"]), "tool a b")
+
+    def test_first_argument_naming_a_binary_starts_it(self):
+        self.assertEqual(self.run_apprun(["toolctl", "x"]), "toolctl x")
+
+    def test_invoked_name_selects_the_binary(self):
+        self.assertEqual(self.run_apprun(["x"], argv0="/usr/local/bin/toolctl"), "toolctl x")
+
+    def test_unrelated_invoked_name_falls_back_to_the_main_exe(self):
+        self.assertEqual(self.run_apprun(["x"], argv0="tool-1.2.3-linux-x86_64.AppImage"),
+                         "tool x")
 
 
 if __name__ == "__main__":

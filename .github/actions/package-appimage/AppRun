@@ -1,0 +1,16 @@
+#!/bin/sh
+# Default AppRun. Starts @EXE@, unless the image was invoked under another binary's name
+# (a symlink to the AppImage; the runtime sets ARGV0 to that name) or that name is the first
+# argument, so every binary packaged beside the main one is reachable from the same image.
+HERE="$(dirname "$(readlink -f "$0")")"
+name="$(basename "${ARGV0:-$0}")"
+
+if [ "$name" != AppRun ] && [ -f "$HERE/usr/bin/$name" ]; then
+    exec "$HERE/usr/bin/$name" "$@"
+fi
+if [ $# -gt 0 ] && [ -f "$HERE/usr/bin/$1" ]; then
+    bin="$1"
+    shift
+    exec "$HERE/usr/bin/$bin" "$@"
+fi
+exec "$HERE/usr/bin/@EXE@" "$@"
