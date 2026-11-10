@@ -1044,7 +1044,8 @@ class PackageNfpmScript(unittest.TestCase):
                     "ARCH": "x86_64", "NAME": "tool-1.2.3-linux-x86_64",
                     "OUT_DIR": str(out), "GITHUB_OUTPUT": str(gh_output), **env}
             result = run_script(self.script, full)
-            self.staged = str(staged.resolve())
+            # Not resolve(): on macOS the temp dir sits behind a /var -> /private/var symlink.
+            self.staged = str(staged)
             self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
             self.gh_output = gh_output.read_text()
             self.checksum = None
