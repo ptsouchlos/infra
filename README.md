@@ -162,7 +162,7 @@ See [tests/README.md](tests/README.md).
 | `setup-cpp` | `compiler`, `version`, `cmake-version`, `vcpkg` | installs the compiler (and CMake/Ninja when missing or pinned), exports `CC`/`CXX`, sets up MSVC on Windows; `vcpkg: true` exports `VCPKG_ROOT`, cloning and bootstrapping vcpkg into `RUNNER_TEMP` unless the job already set it |
 | `cmake-build` | `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args`, `test`, `install-prefix`, `ccache`, `cpm-cache` | configure, build, ctest, optional install |
 | `setup-rust` | `toolchain`, `components`, `targets`, `just` | rustup toolchain and targets (a Linux `-musl` target also installs `musl-tools`), cargo cache, optional `just` |
-| `cargo-release` | `target`, `bin`, `name`, `archive`, `working-directory`, `cargo-args`, `out-dir`, `release` | `cargo build --release` for one target, package (tar.gz, zip or the bare binary), write a `.sha256`, optionally upload to the tag's release |
+| `cargo-release` | `target`, `bin`, `bins`, `name`, `archive`, `working-directory`, `cargo-args`, `out-dir`, `release` | `cargo build --release` for one target, package one or several binaries (tar.gz, zip or the bare binary), write a `.sha256`, optionally upload to the tag's release; the `bin-dir` output is the directory holding just the built binaries |
 | `cargo-build` | `build-type`, `working-directory`, `test`, `bin`, `args` | `just build` (debug) or `just build-release`, then `just test` (with `--release` for release); needs `rust/just/cargo.just` imported and `just` installed |
 | `cargo-deps` | `deny`, `deny-checks`, `deny-args`, `machete`, `machete-args`, `working-directory` | cargo-deny (`licenses bans sources` by default) and cargo-machete (unused dependencies); Linux runners only; your repo supplies `deny.toml` |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
@@ -259,7 +259,7 @@ Add repo-specific steps, such as installing system libraries, by using `setup-ru
 Notes:
 - `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.
 - `cargo-release` builds for the runner's own architecture only; cross-linking (for example x86_64 to aarch64) is not supported, so run each target on a matching runner.
-- `cargo-release` assets: the archive holds just the binary at its root, and `<asset>.sha256` holds `<hash>  <bare file name>`, so `sha256sum -c` works from the download directory.
+- `cargo-release` assets: the archive holds just the binaries at its root (set `bins: "app appd appctl"` to ship several together; `bins` wins over `bin`, the default name uses the first one, and `archive: none` needs a single binary), and `<asset>.sha256` holds `<hash>  <bare file name>`, so `sha256sum -c` works from the download directory.
 - Supported compiler/OS pairs: Linux gcc and clang, macOS appleclang, Windows msvc and clang. Anything else fails fast.
 - `configure-args`, `clippy-args`, `args` and `cargo-args` are split on spaces, so one argument cannot contain a space: write `--features=a,b`, not `--features "a b"`.
 - With a `preset`, the preset runs the configure step, `build-dir` is ignored in favor of its
