@@ -45,7 +45,7 @@ class ActionStructure(unittest.TestCase):
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
              "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
-             "package-appimage"},
+             "package-appimage", "package-flatpak"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -1290,6 +1290,147 @@ class PackageAppimageAppRun(unittest.TestCase):
     def test_unrelated_invoked_name_falls_back_to_the_main_exe(self):
         self.assertEqual(self.run_apprun(["x"], argv0="tool-1.2.3-linux-x86_64.AppImage"),
                          "tool x")
+
+
+@unittest.skipIf(sys.platform == "win32", "uses bash scripts")
+class PackageFlatpakInstallScript(unittest.TestCase):
+    script = ACTIONS / "package-flatpak" / "install.sh"
+
+    def run_install(self, **env):
+        return run_script(self.script, {"DRY_RUN": "1", **env})
+
+    def test_installs_the_tools_and_adds_the_remote(self):
+        r = self.run_install()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("apt-get install -y flatpak flatpak-builder", r.stdout)
+        self.assertIn("flatpak remote-add --user --if-not-exists flathub "
+                      "https://dl.flathub.org/repo/flathub.flatpakrepo", r.stdout)
+
+    def test_runtime_repo_override_is_used_for_the_remote(self):
+        r = self.run_install(RUNTIME_REPO="https://example.org/r.flatpakrepo")
+        self.assertIn("flathub https://example.org/r.flatpakrepo", r.stdout)
+
+    def test_lifts_the_apparmor_userns_restriction(self):
+        r = self.run_install()
+        self.assertIn("sysctl -w kernel.apparmor_restrict_unprivileged_userns=0", r.stdout)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses fake tools on PATH")
+class PackageFlatpakScript(unittest.TestCase):
+    script = ACTIONS / "package-flatpak" / "package.sh"
+
+    def run_package(self, manifest=True, **env):
+        """Run package.sh against fake flatpak-builder and flatpak.
+
+        Sets self.builder_args / self.bundle_args (the command lines), self.src_tree (sorted
+        files in the directory flatpak-builder was given the manifest from) and self.out_files.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            builder = fake / "flatpak-builder"
+            builder.write_text(
+                '#!/usr/bin/env bash\n'
+                f'echo "$*" > "{d}/builder_args"\n'
+                'manifest="${!#}"\n'
+                'src="$(dirname "$manifest")"\n'
+                f'(cd "$src" && find . -type f | sort) > "{d}/src_tree"\n'
+                f'cat "$manifest" > "{d}/manifest_seen"\n')
+            builder.chmod(0o755)
+            flatpak = fake / "flatpak"
+            flatpak.write_text(
+                '#!/usr/bin/env bash\n'
+                f'echo "$*" > "{d}/bundle_args"\n'
+                '# build-bundle ... <repo> <bundle> <app-id> <branch>\n'
+                'args=("$@"); n=${#args[@]}\n'
+                'echo bundle > "${args[$((n-3))]}"\n')
+            flatpak.chmod(0o755)
+            binaries = d / "bins"
+            binaries.mkdir()
+            (binaries / "tool").write_text("#!/bin/sh\n")
+            pack = d / "packaging"
+            pack.mkdir()
+            (pack / "io.example.Tool.desktop").write_text("[Desktop Entry]\n")
+            if manifest:
+                (pack / "io.example.Tool.yml").write_text("app-id: io.example.Tool\n")
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            out = d / "dist"
+            full = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                    "MANIFEST": str(pack / "io.example.Tool.yml"), "BIN_DIR": str(binaries),
+                    "APP_ID": "io.example.Tool", "ARCH": "x86_64",
+                    "NAME": "tool-1.2.3-linux-x86_64", "OUT_DIR": str(out),
+                    "GITHUB_OUTPUT": str(gh_output), **env}
+            result = run_script(self.script, full)
+
+            def read(name):
+                path = d / name
+                return path.read_text().strip() if path.exists() else ""
+            self.builder_args = read("builder_args")
+            self.bundle_args = read("bundle_args")
+            self.src_tree = read("src_tree").splitlines()
+            self.manifest_seen = read("manifest_seen")
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            return result
+
+    def test_builds_the_bundle_and_checksum(self):
+        r = self.run_package()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.out_files, ["tool-1.2.3-linux-x86_64.flatpak",
+                                          "tool-1.2.3-linux-x86_64.flatpak.sha256"])
+        self.assertIn("asset=", self.gh_output)
+        self.assertIn("checksum=", self.gh_output)
+
+    def test_manifest_dir_is_copied_with_the_binaries_at_bin(self):
+        self.run_package()
+        self.assertEqual(self.src_tree, ["./bin/tool", "./io.example.Tool.desktop",
+                                         "./io.example.Tool.yml"])
+        self.assertEqual(self.manifest_seen, "app-id: io.example.Tool")
+
+    def test_builder_arguments(self):
+        self.run_package(ARCH="aarch64", BRANCH="beta")
+        for flag in ("--user", "--force-clean", "--disable-rofiles-fuse",
+                     "--install-deps-from=flathub", "--arch=aarch64", "--default-branch=beta"):
+            self.assertIn(flag, self.builder_args)
+        # State stays out of the caller's checkout.
+        self.assertRegex(self.builder_args, r"--state-dir=\S*/state")
+
+    def test_bundle_arguments(self):
+        self.run_package()
+        self.assertIn("build-bundle", self.bundle_args)
+        self.assertIn("--arch=x86_64", self.bundle_args)
+        self.assertIn("--runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo",
+                      self.bundle_args)
+        self.assertTrue(self.bundle_args.endswith("io.example.Tool stable"), self.bundle_args)
+
+    def test_a_stale_bin_next_to_the_manifest_does_not_leak_in(self):
+        with tempfile.TemporaryDirectory() as d:
+            # Same layout as the default run, but the manifest dir already has a bin/ of its own.
+            pack = Path(d) / "packaging"
+            (pack / "bin").mkdir(parents=True)
+            (pack / "bin" / "stale").write_text("x")
+            (pack / "m.yml").write_text("app-id: io.example.Tool\n")
+            self.run_package(MANIFEST=str(pack / "m.yml"))
+        self.assertIn("./bin/tool", self.src_tree)
+        self.assertNotIn("./bin/stale", self.src_tree)
+
+    def test_missing_manifest_fails_before_building(self):
+        r = self.run_package(MANIFEST="/nonexistent/m.yml")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+        self.assertEqual(self.builder_args, "")
+
+    def test_missing_bin_dir_fails_before_building(self):
+        r = self.run_package(BIN_DIR="/nonexistent/bins")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.builder_args, "")
+
+    def test_unsupported_arch_fails(self):
+        r = self.run_package(ARCH="riscv64")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.builder_args, "")
 
 
 if __name__ == "__main__":
