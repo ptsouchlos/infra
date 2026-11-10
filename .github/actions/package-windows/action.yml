@@ -20,7 +20,7 @@ inputs:
     description: Extra WiX preprocessor definitions, one NAME=value per line.
     default: ""
   wix-version:
-    description: WiX dotnet tool version to install. Must be 4.0.0 or later.
+    description: WiX dotnet tool version to install. Keep it on 4.x or 5.x, which are MS-RL with no fee; WiX 6 and later require the Open Source Maintenance Fee (7 adds a EULA with a revenue threshold).
     default: 5.0.2
   out-dir:
     description: Directory the msi and checksum are written to.
