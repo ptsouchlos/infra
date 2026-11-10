@@ -45,7 +45,7 @@ class ActionStructure(unittest.TestCase):
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
              "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
-             "package-appimage", "package-flatpak"},
+             "package-appimage", "package-flatpak", "package-macos"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -1431,6 +1431,166 @@ class PackageFlatpakScript(unittest.TestCase):
         r = self.run_package(ARCH="riscv64")
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self.builder_args, "")
+
+
+PNG_1024 = (  # only the IHDR is read: a 1024x1024 PNG header
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x04\x00\x00\x00\x04\x00\x08\x02\x00\x00\x00")
+
+PLIST_TEMPLATE = """<plist><dict>
+<key>CFBundleName</key><string>@APP_NAME@</string>
+<key>CFBundleExecutable</key><string>@EXECUTABLE@</string>
+<key>CFBundleIdentifier</key><string>@BUNDLE_ID@</string>
+<key>CFBundleVersion</key><string>@VERSION@</string>
+<key>CFBundleShortVersionString</key><string>@SHORT_VERSION@</string>
+<key>CFBundleIconFile</key><string>@ICON_FILE@</string>
+</dict></plist>
+"""
+
+
+@unittest.skipIf(sys.platform == "win32", "uses fake macOS tools on PATH")
+class PackageMacosScript(unittest.TestCase):
+    """package.sh against fake sips, iconutil, codesign and hdiutil.
+
+    The real tools only exist on macOS; the package-macos CI job exercises them.
+    """
+    script = ACTIONS / "package-macos" / "package.sh"
+
+    def run_package(self, plist=PLIST_TEMPLATE, icon=PNG_1024, **env):
+        """Sets self.stage (relative paths in the dmg's source folder, symlinks marked with
+        '@'), self.files (path -> text), self.codesign (one line per call), self.sips (pixel
+        sizes) and self.out_files."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+
+            def tool(name, body):
+                path = fake / name
+                path.write_text("#!/usr/bin/env bash\n" + body)
+                path.chmod(0o755)
+            tool("sips", f'echo "$2" >> "{d}/sips"\n'
+                         'while [ $# -gt 0 ]; do [ "$1" = --out ] && echo icon > "$2"; shift; done\n')
+            tool("iconutil", f'(cd "$3" && ls | sort) > "{d}/iconset"\necho icns > "$5"\n')
+            tool("codesign", f'echo "$*" >> "{d}/codesign"\n')
+            tool("hdiutil",
+                 f'echo "$*" > "{d}/hdiutil"\n'
+                 'args=("$@"); n=${#args[@]}\n'
+                 'while [ $# -gt 0 ]; do [ "$1" = -srcfolder ] && src="$2"; shift; done\n'
+                 f'cp -R "$src" "{d}/snapshot"\n'
+                 'echo dmg > "${args[$((n-1))]}"\n')
+            binaries = d / "bins"
+            binaries.mkdir()
+            (binaries / "tool").write_text("#!/bin/sh\n")
+            (binaries / "toolctl").write_text("#!/bin/sh\n")
+            (d / "Info.plist").write_text(plist)
+            (d / "icon.png").write_bytes(icon)
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            out = d / "dist"
+            full = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                    "BIN_DIR": str(binaries), "EXE": "tool", "APP_NAME": "Tool",
+                    "BUNDLE_ID": "io.example.Tool", "VERSION": "1.2.3",
+                    "INFO_PLIST": str(d / "Info.plist"), "ICON": str(d / "icon.png"),
+                    "NAME": "tool-1.2.3-macos-aarch64", "OUT_DIR": str(out),
+                    "GITHUB_OUTPUT": str(gh_output), **env}
+            result = run_script(self.script, full)
+
+            def read(name):
+                path = d / name
+                return path.read_text().strip().splitlines() if path.exists() else []
+            snap = d / "snapshot"
+            self.stage, self.files = [], {}
+            if snap.exists():
+                for p in sorted(snap.rglob("*")):
+                    rel = str(p.relative_to(snap))
+                    if p.is_symlink():
+                        self.stage.append(rel + "@")
+                    elif p.is_file():
+                        self.stage.append(rel)
+                        self.files[rel] = p.read_text(errors="replace")
+            self.codesign = read("codesign")
+            self.sips = read("sips")
+            self.iconset = read("iconset")
+            self.hdiutil = " ".join(read("hdiutil"))
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            return result
+
+    def test_builds_the_dmg_and_checksum(self):
+        r = self.run_package()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.out_files, ["tool-1.2.3-macos-aarch64.dmg",
+                                          "tool-1.2.3-macos-aarch64.dmg.sha256"])
+        self.assertIn("asset=", self.gh_output)
+
+    def test_bundle_layout_with_all_binaries_in_macos(self):
+        self.run_package()
+        for path in ("Tool.app/Contents/MacOS/tool", "Tool.app/Contents/MacOS/toolctl",
+                     "Tool.app/Contents/Info.plist", "Tool.app/Contents/Resources/Tool.icns"):
+            self.assertIn(path, self.stage)
+
+    def test_dmg_holds_an_applications_shortcut(self):
+        self.run_package()
+        self.assertIn("Applications@", self.stage)
+        self.assertIn("-volname Tool", self.hdiutil)
+        self.assertIn("-format UDZO", self.hdiutil)
+
+    def test_info_plist_placeholders_are_replaced(self):
+        self.run_package()
+        plist = self.files["Tool.app/Contents/Info.plist"]
+        self.assertNotIn("@", plist)
+        for fragment in ("<string>Tool</string>", "<string>tool</string>",
+                         "<string>io.example.Tool</string>", "<string>1.2.3</string>"):
+            self.assertIn(fragment, plist)
+
+    def test_prerelease_is_dropped_from_the_short_version_only(self):
+        self.run_package(VERSION="1.2.3-rc.1")
+        plist = self.files["Tool.app/Contents/Info.plist"]
+        self.assertIn("<key>CFBundleVersion</key><string>1.2.3-rc.1</string>", plist)
+        self.assertIn("<key>CFBundleShortVersionString</key><string>1.2.3</string>", plist)
+
+    def test_iconset_has_all_ten_sizes(self):
+        self.run_package()
+        self.assertEqual(len(self.iconset), 10)
+        self.assertIn("icon_512x512@2x.png", self.iconset)
+        self.assertEqual(sorted(set(self.sips), key=int), ["16", "32", "64", "128", "256", "512", "1024"])
+
+    def test_signs_ad_hoc_by_default_binaries_first_then_the_bundle(self):
+        self.run_package()
+        self.assertEqual(len(self.codesign), 4)  # two binaries, the bundle, and the verify
+        for line in self.codesign[:3]:
+            self.assertTrue(line.startswith("--force --sign - "), line)
+        self.assertTrue(self.codesign[2].endswith("Tool.app"), self.codesign[2])
+        self.assertNotIn("--options runtime", " ".join(self.codesign))
+        self.assertTrue(self.codesign[3].startswith("--verify"), self.codesign[3])
+
+    def test_developer_id_turns_on_hardened_runtime_and_keeps_spaces_intact(self):
+        self.run_package(SIGN_IDENTITY="Developer ID Application: Example (ABCDE12345)")
+        for line in self.codesign[:3]:
+            self.assertIn("--sign Developer ID Application: Example (ABCDE12345) "
+                          "--options runtime --timestamp", line)
+
+    def test_icon_must_be_at_least_1024(self):
+        small = PNG_1024.replace(b"\x00\x00\x04\x00\x00\x00\x04\x00", b"\x00\x00\x02\x00\x00\x00\x02\x00")
+        r = self.run_package(icon=small)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("1024", r.stdout + r.stderr)
+        self.assertEqual(self.out_files, [])
+
+    def test_icon_must_be_a_png(self):
+        r = self.run_package(icon=b"not a png at all, but long enough to read")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+
+    def test_exe_must_be_in_bin_dir(self):
+        r = self.run_package(EXE="missing")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.codesign, [])
+
+    def test_missing_plist_fails(self):
+        r = self.run_package(INFO_PLIST="/nonexistent/Info.plist")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("info-plist", r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

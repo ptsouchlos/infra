@@ -1,0 +1,69 @@
+name: Package a macOS app
+description: Assemble a .app bundle from prebuilt binaries, an Info.plist template and a PNG icon, sign it (ad hoc by default), wrap it in a .dmg with an /Applications shortcut, write a .sha256, and optionally upload both to a GitHub release. macOS runners only.
+inputs:
+  bin-dir:
+    description: Directory holding the prebuilt binaries, for example the cargo-release bin-dir output. Every file goes to Contents/MacOS in the bundle.
+    required: true
+  exe:
+    description: File in bin-dir that is the bundle's main executable (CFBundleExecutable).
+    required: true
+  app-name:
+    description: Display name; the bundle is <app-name>.app and the dmg volume is named after it.
+    required: true
+  bundle-id:
+    description: Bundle identifier (CFBundleIdentifier), for example io.github.user.App.
+    required: true
+  version:
+    description: App version, without a leading v. A prerelease suffix is dropped for the short version string.
+    required: true
+  info-plist:
+    description: "Path to an Info.plist template. Placeholders replaced: @APP_NAME@, @EXECUTABLE@, @BUNDLE_ID@, @VERSION@, @SHORT_VERSION@, @ICON_FILE@."
+    required: true
+  icon:
+    description: Path to a square PNG of at least 1024 pixels; the iconset and .icns are derived from it.
+    required: true
+  name:
+    description: Asset base name; the image is written as <name>.dmg.
+    required: true
+  sign-identity:
+    description: codesign identity. "-" signs ad hoc, which Apple Silicon needs for a bundle to launch but which Gatekeeper still warns about. A Developer ID identity also turns on the hardened runtime and a secure timestamp; its certificate must already be in a keychain the job can use. Notarization is not done yet.
+    default: "-"
+  out-dir:
+    description: Directory the dmg and checksum are written to.
+    default: dist
+  release:
+    description: Upload the dmg and checksum to the GitHub release for the current tag.
+    default: "false"
+outputs:
+  asset:
+    description: Path of the .dmg.
+    value: ${{ steps.pkg.outputs.asset }}
+  checksum:
+    description: Path of the dmg's .sha256 file.
+    value: ${{ steps.pkg.outputs.checksum }}
+runs:
+  using: composite
+  steps:
+    - name: Package
+      id: pkg
+      shell: bash
+      env:
+        BIN_DIR: ${{ inputs.bin-dir }}
+        EXE: ${{ inputs.exe }}
+        APP_NAME: ${{ inputs.app-name }}
+        BUNDLE_ID: ${{ inputs.bundle-id }}
+        VERSION: ${{ inputs.version }}
+        INFO_PLIST: ${{ inputs.info-plist }}
+        ICON: ${{ inputs.icon }}
+        NAME: ${{ inputs.name }}
+        SIGN_IDENTITY: ${{ inputs.sign-identity }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: bash "${{ github.action_path }}/package.sh"
+    - name: Upload to the release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          ${{ steps.pkg.outputs.asset }}
+          ${{ steps.pkg.outputs.checksum }}
+        prerelease: ${{ contains(github.ref_name, '-') }}
