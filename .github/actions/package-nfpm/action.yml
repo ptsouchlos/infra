@@ -1,0 +1,65 @@
+name: Package with nFPM
+description: Build .deb and/or .rpm packages from prebuilt files with a caller-supplied nFPM config, write a .sha256 for each, and optionally upload them to a GitHub release. Linux runners only.
+inputs:
+  config:
+    description: Path to the nFPM YAML. It may reference ${PKG_BIN_DIR}, ${PKG_VERSION} and ${PKG_ARCH} (amd64 or arm64; nFPM converts it per format). nFPM only expands variables in contents src and dst for entries with expand true.
+    required: true
+  bin-dir:
+    description: Directory holding the prebuilt files to package, for example the cargo-release bin-dir output.
+    required: true
+  version:
+    description: Package version, without a leading v.
+    required: true
+  arch:
+    description: "Target architecture of the files: x86_64 or aarch64."
+    required: true
+  name:
+    description: Asset base name; the packages are written as <name>.deb and <name>.rpm.
+    required: true
+  formats:
+    description: Whitespace-separated formats to build, from deb and rpm.
+    default: "deb rpm"
+  out-dir:
+    description: Directory the packages and checksums are written to.
+    default: dist
+  nfpm-version:
+    description: nFPM release to install, without the leading v.
+    default: "2.48.0"
+  release:
+    description: Upload the packages and checksums to the GitHub release for the current tag.
+    default: "false"
+outputs:
+  assets:
+    description: Newline-separated paths of the packages.
+    value: ${{ steps.pkg.outputs.assets }}
+  checksums:
+    description: Newline-separated paths of the .sha256 files.
+    value: ${{ steps.pkg.outputs.checksums }}
+runs:
+  using: composite
+  steps:
+    - name: Install nFPM
+      shell: bash
+      env:
+        NFPM_VERSION: ${{ inputs.nfpm-version }}
+      run: bash "${{ github.action_path }}/install.sh"
+    - name: Package
+      id: pkg
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+        BIN_DIR: ${{ inputs.bin-dir }}
+        VERSION: ${{ inputs.version }}
+        ARCH: ${{ inputs.arch }}
+        NAME: ${{ inputs.name }}
+        FORMATS: ${{ inputs.formats }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: bash "${{ github.action_path }}/package.sh"
+    - name: Upload to the release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          ${{ steps.pkg.outputs.assets }}
+          ${{ steps.pkg.outputs.checksums }}
+        prerelease: ${{ contains(github.ref_name, '-') }}

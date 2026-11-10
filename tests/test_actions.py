@@ -44,7 +44,7 @@ class ActionStructure(unittest.TestCase):
         self.assertEqual(
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
-             "cargo-deps", "build-docs", "update-infra", "cargo-release"},
+             "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -984,6 +984,119 @@ class CargoReleaseRealScript(unittest.TestCase):
             assets = [p.name for p in out.iterdir()]
             self.assertEqual(len(assets), 2, assets)
             self.assertTrue(any(a.endswith(".sha256") for a in assets), assets)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake nfpm on PATH")
+class PackageNfpmInstallScript(unittest.TestCase):
+    script = ACTIONS / "package-nfpm" / "install.sh"
+
+    def run_install(self, **env):
+        return run_script(self.script, {"DRY_RUN": "1", "NFPM_VERSION": "2.48.0", **env})
+
+    def test_x64_runner_fetches_the_x86_64_build_and_checksums(self):
+        r = self.run_install(RUNNER_ARCH="X64")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz", r.stdout)
+        self.assertIn("v2.48.0/checksums.txt", r.stdout)
+
+    def test_arm64_runner_fetches_the_arm64_build(self):
+        r = self.run_install(RUNNER_ARCH="ARM64")
+        self.assertIn("nfpm_2.48.0_Linux_arm64.tar.gz", r.stdout)
+
+    def test_unknown_runner_architecture_fails(self):
+        r = self.run_install(RUNNER_ARCH="PPC")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake nfpm on PATH")
+class PackageNfpmScript(unittest.TestCase):
+    script = ACTIONS / "package-nfpm" / "package.sh"
+
+    def run_package(self, config=True, **env):
+        """Run package.sh against a fake nfpm; returns (result, nfpm calls)."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            calls = d / "calls"
+            bindir = d / "fakebin"
+            bindir.mkdir()
+            nfpm = bindir / "nfpm"
+            # Record the call and the exported variables, then write the --target file.
+            nfpm.write_text(
+                '#!/usr/bin/env bash\n'
+                f'echo "$*" >> "{calls}"\n'
+                f'echo "env $PKG_BIN_DIR $PKG_VERSION $PKG_ARCH" >> "{calls}"\n'
+                'while [ $# -gt 0 ]; do\n'
+                '  [ "$1" = --target ] && echo package > "$2"\n'
+                '  shift\n'
+                'done\n')
+            nfpm.chmod(0o755)
+            staged = d / "staged"
+            staged.mkdir()
+            cfg = d / "nfpm.yaml"
+            if config:
+                cfg.write_text("name: tool\n")
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            out = d / "dist"
+            full = {"PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
+                    "CONFIG": str(cfg), "BIN_DIR": str(staged), "VERSION": "1.2.3",
+                    "ARCH": "x86_64", "NAME": "tool-1.2.3-linux-x86_64",
+                    "OUT_DIR": str(out), "GITHUB_OUTPUT": str(gh_output), **env}
+            result = run_script(self.script, full)
+            self.staged = str(staged.resolve())
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            self.checksum = None
+            for sha in out.glob("*.deb.sha256") if out.exists() else []:
+                self.checksum = sha.read_text()
+            lines = calls.read_text().splitlines() if calls.exists() else []
+            return result, lines
+
+    def test_default_builds_deb_and_rpm_with_checksums(self):
+        r, calls = self.run_package()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.out_files, [
+            "tool-1.2.3-linux-x86_64.deb", "tool-1.2.3-linux-x86_64.deb.sha256",
+            "tool-1.2.3-linux-x86_64.rpm", "tool-1.2.3-linux-x86_64.rpm.sha256"])
+        self.assertEqual(sum(c.startswith("package ") for c in calls), 2)
+        self.assertRegex(self.checksum, r"^[0-9a-f]{64}  tool-1\.2\.3-linux-x86_64\.deb\n$")
+
+    def test_packager_flag_matches_each_format(self):
+        _, calls = self.run_package(FORMATS="rpm")
+        self.assertEqual(len([c for c in calls if c.startswith("package ")]), 1)
+        self.assertIn("--packager rpm", calls[0])
+
+    def test_config_variables_are_exported_with_go_arch_names(self):
+        # calls holds one "package ..." line then one "env ..." line per format.
+        _, calls = self.run_package(ARCH="aarch64", FORMATS="deb")
+        self.assertEqual(calls[1], f"env {self.staged} 1.2.3 arm64")
+
+    def test_x86_64_maps_to_amd64(self):
+        _, calls = self.run_package()
+        self.assertEqual(calls[1], f"env {self.staged} 1.2.3 amd64")
+
+    def test_outputs_list_assets_and_checksums(self):
+        self.run_package(FORMATS="deb")
+        self.assertIn("tool-1.2.3-linux-x86_64.deb\n", self.gh_output)
+        self.assertIn("tool-1.2.3-linux-x86_64.deb.sha256\n", self.gh_output)
+
+    def test_unsupported_arch_fails(self):
+        r, calls = self.run_package(ARCH="riscv64")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(calls, [])
+
+    def test_unsupported_format_fails_before_building(self):
+        r, calls = self.run_package(FORMATS="deb apk")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+        self.assertEqual(calls, [])
+
+    def test_missing_config_fails(self):
+        r, calls = self.run_package(config=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":
