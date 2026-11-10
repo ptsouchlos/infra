@@ -1,0 +1,46 @@
+name: Publish a release
+description: Create a draft GitHub release for a tag, upload every file in an assets directory plus the release manifest, and publish the release once all uploads succeed so a half-built release is never visible. Needs gh and contents write permission.
+inputs:
+  assets-dir:
+    description: Directory searched recursively for assets and their .sha256 files, for example the path given to actions/download-artifact.
+    required: true
+  manifest:
+    description: Path of the release manifest JSON, for example the manifest output of release-manifest.
+    required: true
+  tag:
+    description: Release tag to publish, for example v1.2.3.
+    default: ${{ github.ref_name }}
+  title:
+    description: Release title. Defaults to the tag name.
+    default: ""
+  notes:
+    description: Release notes body, or a preamble placed above the generated notes when generate-notes is true.
+    default: ""
+  generate-notes:
+    description: Ask GitHub to generate release notes from commits and pull requests.
+    default: "true"
+  prerelease:
+    description: "auto (true when the tag contains '-', else false), true or false."
+    default: auto
+  draft:
+    description: Leave the release as a draft after uploading instead of publishing it.
+    default: "false"
+  token:
+    description: GitHub token with contents write permission.
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - name: Publish the release
+      shell: bash
+      env:
+        ASSETS_DIR: ${{ inputs.assets-dir }}
+        MANIFEST: ${{ inputs.manifest }}
+        TAG: ${{ inputs.tag }}
+        TITLE: ${{ inputs.title }}
+        NOTES: ${{ inputs.notes }}
+        GENERATE_NOTES: ${{ inputs.generate-notes }}
+        PRERELEASE: ${{ inputs.prerelease }}
+        DRAFT: ${{ inputs.draft }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "${{ github.action_path }}/publish.sh"

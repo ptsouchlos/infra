@@ -45,7 +45,8 @@ class ActionStructure(unittest.TestCase):
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
              "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
-             "package-appimage", "package-flatpak", "package-macos", "package-windows", "release-manifest"},
+             "package-appimage", "package-flatpak", "package-macos", "package-windows",
+             "release-manifest", "publish-release"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -1842,6 +1843,169 @@ class ReleaseManifestScript(unittest.TestCase):
         r = self.run_manifest(files)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(len(self.manifest["assets"]), len(self.FILES))
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake gh on PATH")
+class PublishReleaseScript(unittest.TestCase):
+    script = ACTIONS / "publish-release" / "publish.sh"
+
+    FILES = {
+        "deb/tool-1.2.3-linux-x86_64.deb": "deb",
+        "deb/tool-1.2.3-linux-x86_64.deb.sha256": "h  tool-1.2.3-linux-x86_64.deb\n",
+        "dmg/tool-1.2.3-macos-aarch64.dmg": "dmg",
+        "dmg/tool-1.2.3-macos-aarch64.dmg.sha256": "h  tool-1.2.3-macos-aarch64.dmg\n",
+    }
+
+    def run_publish(self, files=None, manifest=True, exists=False, fail_on="", **env):
+        """Run publish.sh against a fake gh; sets self.calls (one list of args per gh call)."""
+        if files is None:
+            files = self.FILES
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            calls = d / "calls"
+            gh = fake / "gh"
+            view_rc = 0 if exists else 1
+            gh.write_text(
+                "#!/usr/bin/env bash\n"
+                f'if [ "$1 $2" = "release view" ]; then exit {view_rc}; fi\n'
+                f'printf "%s\\t" "$@" >> "{calls}"; printf "\\n" >> "{calls}"\n'
+                f'if [ -n "{fail_on}" ] && [ "$2" = "{fail_on}" ]; then exit 1; fi\n')
+            gh.chmod(0o755)
+            assets = d / "assets"
+            assets.mkdir()
+            for rel, text in files.items():
+                path = assets / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            manifest_path = d / "dist" / "tool-1.2.3-manifest.json"
+            if manifest:
+                manifest_path.parent.mkdir(parents=True, exist_ok=True)
+                manifest_path.write_text("{}\n")
+            full = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                    "ASSETS_DIR": str(assets), "MANIFEST": str(manifest_path),
+                    "TAG": "v1.2.3", **env}
+            result = run_script(self.script, full)
+            self.calls = [line.split("\t")[:-1]
+                          for line in calls.read_text().splitlines()] if calls.exists() else []
+            return result
+
+    def test_creates_draft_uploads_assets_and_manifest_then_publishes(self):
+        r = self.run_publish()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual([c[:3] for c in self.calls], [
+            ["release", "create", "v1.2.3"],
+            ["release", "upload", "v1.2.3"],
+            ["release", "edit", "v1.2.3"],
+        ])
+        create, upload, edit = self.calls
+        self.assertIn("--draft", create)
+        self.assertIn("--verify-tag", create)
+        self.assertIn("--generate-notes", create)
+        self.assertNotIn("--prerelease", create)
+        self.assertEqual(upload[3], "--clobber")
+        uploaded = [Path(p).name for p in upload[4:]]
+        self.assertEqual(uploaded, [
+            "tool-1.2.3-linux-x86_64.deb",
+            "tool-1.2.3-linux-x86_64.deb.sha256",
+            "tool-1.2.3-macos-aarch64.dmg",
+            "tool-1.2.3-macos-aarch64.dmg.sha256",
+            "tool-1.2.3-manifest.json",
+        ])
+        self.assertEqual(edit[3:], ["--draft=false"])
+
+    def test_upload_failure_leaves_the_release_a_draft(self):
+        r = self.run_publish(fail_on="upload")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual([c[1] for c in self.calls], ["create", "upload"])
+
+    def test_existing_release_skips_create_and_uploads_with_clobber(self):
+        r = self.run_publish(exists=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual([c[1] for c in self.calls], ["upload", "edit"])
+
+    def test_prerelease_auto_detects_hyphen_in_the_tag(self):
+        self.run_publish(TAG="v1.2.3-rc.1")
+        self.assertIn("--prerelease", self.calls[0])
+
+    def test_prerelease_can_be_forced_on_or_off(self):
+        self.run_publish(TAG="v1.2.3", PRERELEASE="true")
+        self.assertIn("--prerelease", self.calls[0])
+        self.run_publish(TAG="v1.2.3-rc.1", PRERELEASE="false")
+        self.assertNotIn("--prerelease", self.calls[0])
+
+    def test_draft_true_keeps_the_release_a_draft(self):
+        r = self.run_publish(DRAFT="true")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual([c[1] for c in self.calls], ["create", "upload"])
+
+    def test_title_and_notes_reach_gh_release_create(self):
+        self.run_publish(TITLE="Tool 1.2.3", NOTES="Unsigned macOS build.")
+        create = self.calls[0]
+        self.assertEqual(create[create.index("--title") + 1], "Tool 1.2.3")
+        self.assertEqual(create[create.index("--notes") + 1], "Unsigned macOS build.")
+        self.assertIn("--generate-notes", create)
+
+    def test_generate_notes_false_without_notes_passes_empty_notes(self):
+        self.run_publish(GENERATE_NOTES="false")
+        create = self.calls[0]
+        self.assertNotIn("--generate-notes", create)
+        self.assertEqual(create[create.index("--notes") + 1], "")
+
+    def test_manifest_inside_assets_dir_is_uploaded_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            calls = d / "calls"
+            gh = fake / "gh"
+            gh.write_text(
+                "#!/usr/bin/env bash\n"
+                'if [ "$1 $2" = "release view" ]; then exit 1; fi\n'
+                f'printf "%s\\t" "$@" >> "{calls}"; printf "\\n" >> "{calls}"\n')
+            gh.chmod(0o755)
+            assets = d / "assets"
+            assets.mkdir()
+            (assets / "tool-1.2.3-linux-x86_64.deb").write_text("deb")
+            manifest = assets / "tool-1.2.3-manifest.json"
+            manifest.write_text("{}\n")
+            r = run_script(self.script, {
+                "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                "ASSETS_DIR": str(assets), "MANIFEST": str(manifest), "TAG": "v1.2.3",
+            })
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            upload = calls.read_text().splitlines()[1].rstrip("\t").split("\t")
+            uploaded = [Path(p).name for p in upload[4:]]
+            self.assertEqual(uploaded, ["tool-1.2.3-linux-x86_64.deb", "tool-1.2.3-manifest.json"])
+
+    def test_duplicate_file_names_fail_before_calling_gh(self):
+        r = self.run_publish(files={
+            "a/tool-1.2.3-linux-x86_64.deb": "1",
+            "b/tool-1.2.3-linux-x86_64.deb": "2",
+        })
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("duplicate", r.stdout + r.stderr)
+        self.assertEqual(self.calls, [])
+
+    def test_empty_assets_dir_fails_before_calling_gh(self):
+        r = self.run_publish(files={})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no assets", r.stdout + r.stderr)
+        self.assertEqual(self.calls, [])
+
+    def test_missing_manifest_fails_before_calling_gh(self):
+        r = self.run_publish(manifest=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("manifest", r.stdout + r.stderr)
+        self.assertEqual(self.calls, [])
+
+    def test_invalid_boolean_or_prerelease_input_fails(self):
+        for env in ({"PRERELEASE": "maybe"}, {"DRAFT": "yes"}, {"GENERATE_NOTES": "no"}):
+            with self.subTest(env=env):
+                r = self.run_publish(**env)
+                self.assertNotEqual(r.returncode, 0)
+                self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":
