@@ -505,6 +505,73 @@ jobs:
           # Naming the binary as the first argument starts it too.
           ./demo-1.2.3-linux-${{ matrix.arch }}.AppImage ${{ steps.bin.outputs.name }}
 
+  # package-flatpak on the demo crate: the bundle installs, and both binaries run inside the sandbox.
+  package-flatpak:
+    name: package-flatpak (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, arch: x86_64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: aarch64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: ""
+          targets: ${{ matrix.target }}
+      - name: Read the binary name
+        id: bin
+        shell: bash
+        run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/cargo-release
+        id: release
+        with:
+          target: ${{ matrix.target }}
+          bin: ${{ steps.bin.outputs.name }}
+          working-directory: _demo/rust-basic
+      - name: Write the manifest
+        shell: bash
+        run: |
+          mkdir -p packaging
+          cat > packaging/io.example.Demo.yml <<'EOF'
+          app-id: io.example.Demo
+          runtime: org.freedesktop.Platform
+          runtime-version: "26.08"
+          sdk: org.freedesktop.Sdk
+          command: ${{ steps.bin.outputs.name }}
+          modules:
+            - name: demo
+              buildsystem: simple
+              build-commands:
+                - install -Dm755 bin/${{ steps.bin.outputs.name }} /app/bin/${{ steps.bin.outputs.name }}
+              sources:
+                - type: dir
+                  path: bin
+                  dest: bin
+          EOF
+      - uses: ./.github/actions/package-flatpak
+        id: pkg
+        with:
+          manifest: packaging/io.example.Demo.yml
+          bin-dir: ${{ steps.release.outputs.bin-dir }}
+          app-id: io.example.Demo
+          arch: ${{ matrix.arch }}
+          name: demo-1.2.3-linux-${{ matrix.arch }}
+      - name: Verify, install and run the bundle
+        shell: bash
+        run: |
+          cd dist
+          sha256sum -c demo-1.2.3-linux-${{ matrix.arch }}.flatpak.sha256
+          flatpak install --user --noninteractive ./demo-1.2.3-linux-${{ matrix.arch }}.flatpak
+          flatpak run io.example.Demo
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})

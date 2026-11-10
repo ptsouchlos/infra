@@ -1,0 +1,66 @@
+name: Package a Flatpak
+description: Build a single-file .flatpak bundle with flatpak-builder from a caller-supplied manifest and prebuilt binaries, write a .sha256, and optionally upload both to a GitHub release. Linux runners only.
+inputs:
+  manifest:
+    description: Path to the Flatpak manifest (YAML or JSON). Its directory is copied to a scratch directory, and bin-dir appears there as bin/, so the manifest can use a dir source with path bin and reference its desktop file, icon and metainfo relative to itself.
+    required: true
+  bin-dir:
+    description: Directory holding the prebuilt binaries, for example the cargo-release bin-dir output.
+    required: true
+  app-id:
+    description: Application ID, the manifest's app-id (for example io.github.user.App).
+    required: true
+  arch:
+    description: "Target architecture of the binaries: x86_64 or aarch64. The runner must match."
+    required: true
+  name:
+    description: Asset base name; the bundle is written as <name>.flatpak.
+    required: true
+  branch:
+    description: Flatpak branch of the build.
+    default: stable
+  runtime-repo:
+    description: ".flatpakrepo URL recorded in the bundle so installing it can fetch the runtime. Also the source of the flathub remote."
+    default: https://dl.flathub.org/repo/flathub.flatpakrepo
+  out-dir:
+    description: Directory the bundle and checksum are written to.
+    default: dist
+  release:
+    description: Upload the bundle and checksum to the GitHub release for the current tag.
+    default: "false"
+outputs:
+  asset:
+    description: Path of the .flatpak bundle.
+    value: ${{ steps.pkg.outputs.asset }}
+  checksum:
+    description: Path of the bundle's .sha256 file.
+    value: ${{ steps.pkg.outputs.checksum }}
+runs:
+  using: composite
+  steps:
+    - name: Install flatpak-builder
+      shell: bash
+      env:
+        RUNTIME_REPO: ${{ inputs.runtime-repo }}
+      run: bash "${{ github.action_path }}/install.sh"
+    - name: Package
+      id: pkg
+      shell: bash
+      env:
+        MANIFEST: ${{ inputs.manifest }}
+        BIN_DIR: ${{ inputs.bin-dir }}
+        APP_ID: ${{ inputs.app-id }}
+        ARCH: ${{ inputs.arch }}
+        NAME: ${{ inputs.name }}
+        BRANCH: ${{ inputs.branch }}
+        RUNTIME_REPO: ${{ inputs.runtime-repo }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: bash "${{ github.action_path }}/package.sh"
+    - name: Upload to the release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          ${{ steps.pkg.outputs.asset }}
+          ${{ steps.pkg.outputs.checksum }}
+        prerelease: ${{ contains(github.ref_name, '-') }}
