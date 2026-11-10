@@ -572,6 +572,86 @@ jobs:
           flatpak install --user --noninteractive ./demo-1.2.3-linux-${{ matrix.arch }}.flatpak
           flatpak run io.example.Demo
 
+  # package-macos on the demo crate, with the real sips, iconutil, codesign and hdiutil: the dmg
+  # mounts, the bundle verifies, the Applications shortcut is there and the binary runs.
+  package-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: ""
+          targets: aarch64-apple-darwin
+      - name: Read the binary name
+        id: bin
+        shell: bash
+        run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/cargo-release
+        id: release
+        with:
+          target: aarch64-apple-darwin
+          bin: ${{ steps.bin.outputs.name }}
+          working-directory: _demo/rust-basic
+      - name: Write the Info.plist template and icon
+        shell: bash
+        run: |
+          cat > Info.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>@APP_NAME@</string>
+            <key>CFBundleExecutable</key><string>@EXECUTABLE@</string>
+            <key>CFBundleIdentifier</key><string>@BUNDLE_ID@</string>
+            <key>CFBundleVersion</key><string>@VERSION@</string>
+            <key>CFBundleShortVersionString</key><string>@SHORT_VERSION@</string>
+            <key>CFBundleIconFile</key><string>@ICON_FILE@</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+          </dict>
+          </plist>
+          EOF
+          python - <<'EOF'
+          import struct, zlib
+          def chunk(tag, data):
+              body = tag + data
+              return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+          rows = b"".join(b"\x00" + b"\x33\x66\xcc" * 1024 for _ in range(1024))
+          png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1024, 1024, 8, 2, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+          open("demo.png", "wb").write(png)
+          EOF
+      - uses: ./.github/actions/package-macos
+        id: pkg
+        with:
+          bin-dir: ${{ steps.release.outputs.bin-dir }}
+          exe: ${{ steps.bin.outputs.name }}
+          app-name: Demo
+          bundle-id: io.example.Demo
+          version: 1.2.3
+          info-plist: Info.plist
+          icon: demo.png
+          name: demo-1.2.3-macos-aarch64
+      - name: Verify the dmg
+        shell: bash
+        run: |
+          cd dist
+          shasum -a 256 -c demo-1.2.3-macos-aarch64.dmg.sha256
+          mnt="$RUNNER_TEMP/dmg-mount"
+          mkdir -p "$mnt"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" demo-1.2.3-macos-aarch64.dmg
+          ls -la "$mnt"
+          test -L "$mnt/Applications"
+          plutil -lint "$mnt/Demo.app/Contents/Info.plist"
+          test -f "$mnt/Demo.app/Contents/Resources/Demo.icns"
+          codesign --verify --deep --strict --verbose=2 "$mnt/Demo.app"
+          "$mnt/Demo.app/Contents/MacOS/${{ steps.bin.outputs.name }}"
+          hdiutil detach "$mnt"
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
