@@ -352,6 +352,12 @@ jobs:
           esac
           ls extracted
           ./extracted/${{ steps.bin.outputs.name }}*
+      - name: Verify the staged binary directory
+        shell: bash
+        run: |
+          dir='${{ steps.release.outputs.bin-dir }}'
+          ls "$dir"
+          "$dir"/${{ steps.bin.outputs.name }}*
 
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:

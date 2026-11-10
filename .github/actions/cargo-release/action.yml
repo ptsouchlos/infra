@@ -5,10 +5,13 @@ inputs:
     description: Rust target triple to build; must match the runner's architecture.
     required: true
   bin:
-    description: Binary name, without .exe.
-    required: true
+    description: Binary name, without .exe. Ignored when bins is set.
+    default: ""
+  bins:
+    description: Whitespace-separated binary names, without .exe, packaged together in one archive. Wins over bin; archive none needs a single binary.
+    default: ""
   name:
-    description: Asset base name. Defaults to <bin>-<target>.
+    description: Asset base name. Defaults to <first binary>-<target>.
     default: ""
   archive:
     description: "auto (zip for Windows targets, otherwise tar.gz), tar.gz, zip or none (the bare binary)."
@@ -32,6 +35,9 @@ outputs:
   checksum:
     description: Path of the asset's .sha256 file.
     value: ${{ steps.pkg.outputs.checksum }}
+  bin-dir:
+    description: Directory holding just the built binaries, for later packaging steps (installers and so on).
+    value: ${{ steps.pkg.outputs.bin-dir }}
 runs:
   using: composite
   steps:
@@ -41,6 +47,7 @@ runs:
       env:
         TARGET: ${{ inputs.target }}
         BIN: ${{ inputs.bin }}
+        BINS: ${{ inputs.bins }}
         NAME: ${{ inputs.name }}
         ARCHIVE: ${{ inputs.archive }}
         WORKING_DIRECTORY: ${{ inputs.working-directory }}

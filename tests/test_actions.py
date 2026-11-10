@@ -787,8 +787,11 @@ class CargoReleaseScript(unittest.TestCase):
     linux = "x86_64-unknown-linux-musl"
     windows = "x86_64-pc-windows-msvc"
 
-    def run_release(self, binary=True, crate="crate", target_dir=None, **env):
-        """Run package.sh against a fake cargo; returns (result, cargo calls, out dir)."""
+    def run_release(self, binary=True, crate="crate", target_dir=None, missing=(), **env):
+        """Run package.sh against a fake cargo; returns (result, cargo calls, out dir).
+
+        Fake binaries are created for every name in BINS (else BIN), except those in `missing`.
+        """
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             calls = d / "calls"
@@ -803,14 +806,16 @@ class CargoReleaseScript(unittest.TestCase):
             if binary:
                 release.mkdir(parents=True)
                 exe = ".exe" if "windows" in target else ""
-                (release / (env["BIN"] + exe)).write_text("binary")
+                for name in env.get("BINS", env.get("BIN", "")).split():
+                    if name not in missing:
+                        (release / (name + exe)).write_text("binary")
             out = d / "dist"
             gh_output = d / "gh_output"
             gh_output.touch()
             full = {"PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
                     "WORKING_DIRECTORY": str(crate_dir), "OUT_DIR": str(out),
                     "GITHUB_OUTPUT": str(gh_output), "ARCHIVE": "auto", "NAME": "",
-                    "CARGO_ARGS": "", **env}
+                    "CARGO_ARGS": "", "BIN": "", "BINS": "", **env}
             if target_dir:
                 full["CARGO_TARGET_DIR"] = str(target_dir)
             crate_dir.mkdir(exist_ok=True)
@@ -819,6 +824,10 @@ class CargoReleaseScript(unittest.TestCase):
             # Read everything the tests need before the temp dir goes away.
             self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
             self.gh_output = gh_output.read_text()
+            self.stage_names = None
+            for line in self.gh_output.splitlines():
+                if line.startswith("bin-dir="):
+                    self.stage_names = sorted(p.name for p in Path(line[8:]).iterdir())
             self.tar_names = None
             self.zip_names = None
             tar = out / f"tool-{target}.tar.gz"
@@ -894,6 +903,57 @@ class CargoReleaseScript(unittest.TestCase):
         self.run_release(TARGET=self.linux, BIN="tool")
         self.assertRegex(self.gh_output, r"(?m)^asset=.*\.tar\.gz$")
         self.assertRegex(self.gh_output, r"(?m)^checksum=.*\.tar\.gz\.sha256$")
+
+    def test_bins_are_all_in_the_tar_archive(self):
+        r, _, _ = self.run_release(TARGET=self.linux, BINS="tool toold toolctl")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(sorted(self.tar_names), ["tool", "toolctl", "toold"])
+
+    def test_bins_default_name_uses_the_first_binary(self):
+        self.run_release(TARGET=self.linux, BINS="tool toold")
+        self.assertIn(f"tool-{self.linux}.tar.gz", self.out_files)
+
+    @unittest.skipUnless(shutil.which("7z"), "7z is required")
+    def test_bins_are_all_in_the_zip_archive(self):
+        r, _, _ = self.run_release(TARGET=self.windows, BINS="tool toold")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(sorted(self.zip_names), ["tool.exe", "toold.exe"])
+
+    def test_bins_take_precedence_over_bin(self):
+        self.run_release(TARGET=self.linux, BIN="other", BINS="tool toold")
+        self.assertEqual(sorted(self.tar_names), ["tool", "toold"])
+
+    def test_bin_alone_still_works(self):
+        r, _, _ = self.run_release(TARGET=self.linux, BIN="tool")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.tar_names, ["tool"])
+
+    def test_neither_bin_nor_bins_fails(self):
+        r, _, _ = self.run_release(TARGET=self.linux)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+
+    def test_a_missing_binary_among_several_is_named(self):
+        r, _, _ = self.run_release(TARGET=self.linux, BINS="tool toold", missing=("toold",))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(f"target/{self.linux}/release/toold", r.stdout + r.stderr)
+
+    def test_archive_none_rejects_several_binaries(self):
+        r, _, _ = self.run_release(TARGET=self.linux, BINS="tool toold", ARCHIVE="none")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+
+    def test_staged_directory_holds_every_binary(self):
+        self.run_release(TARGET=self.linux, BINS="tool toold toolctl")
+        self.assertEqual(self.stage_names, ["tool", "toolctl", "toold"])
+
+    def test_staged_directory_is_output_for_a_single_bin_too(self):
+        self.run_release(TARGET=self.linux, BIN="tool")
+        self.assertEqual(self.stage_names, ["tool"])
+
+    def test_staged_directory_with_archive_none(self):
+        self.run_release(TARGET=self.linux, BIN="tool", ARCHIVE="none")
+        self.assertEqual(self.stage_names, ["tool"])
 
 
 @unittest.skipUnless(shutil.which("cargo") and shutil.which("rustc"), "cargo is required")
