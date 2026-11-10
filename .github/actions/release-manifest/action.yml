@@ -1,0 +1,39 @@
+name: Release manifest
+description: Gather every release asset and its .sha256 from a directory of downloaded artifacts into one manifest JSON (name, version, commit, and per-asset os, arch, format, kind, size, sha256 and signed). Fails when an asset is misnamed, has no checksum, or does not match it. Needs python3.
+inputs:
+  assets-dir:
+    description: Directory searched recursively for assets and their .sha256 files, for example the path given to actions/download-artifact.
+    required: true
+  name:
+    description: App name. Every asset must be named <name>-<version>-<os>-<arch>[-<variant>].<ext>, with os linux, macos or windows and arch x86_64 or aarch64.
+    required: true
+  version:
+    description: Release version, without a leading v. A version containing "-" marks the release as a prerelease.
+    required: true
+  commit:
+    description: Commit sha the release was built from.
+    default: ${{ github.sha }}
+  signed:
+    description: Record every asset as signed. Leave false until signing is set up.
+    default: "false"
+  out-dir:
+    description: Directory the manifest is written to, as <name>-<version>-manifest.json.
+    default: dist
+outputs:
+  manifest:
+    description: Path of the manifest file.
+    value: ${{ steps.manifest.outputs.manifest }}
+runs:
+  using: composite
+  steps:
+    - name: Write the manifest
+      id: manifest
+      shell: bash
+      env:
+        ASSETS_DIR: ${{ inputs.assets-dir }}
+        NAME: ${{ inputs.name }}
+        VERSION: ${{ inputs.version }}
+        COMMIT: ${{ inputs.commit }}
+        SIGNED: ${{ inputs.signed }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: python3 "${{ github.action_path }}/manifest.py"

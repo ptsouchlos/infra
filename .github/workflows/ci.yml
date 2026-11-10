@@ -720,6 +720,40 @@ jobs:
           cmd //c "msiexec /x $msi /qn /l*v uninstall.log" || { cat uninstall.log; exit 1; }
           test ! -e "$exe"
 
+  release-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Make throwaway assets, one folder each like download-artifact leaves them
+        shell: bash
+        run: |
+          for spec in "deb linux-x86_64.deb" "dmg macos-aarch64.dmg" "msi windows-x86_64.msi" "tgz linux-x86_64.tar.gz"; do
+            set -- $spec
+            mkdir -p "assets/$1"
+            file="demo-1.2.3-$2"
+            echo "$file" > "assets/$1/$file"
+            (cd "assets/$1" && sha256sum "$file" > "$file.sha256")
+          done
+      - uses: ./.github/actions/release-manifest
+        id: manifest
+        with:
+          assets-dir: assets
+          name: demo
+          version: 1.2.3
+      - name: Check the manifest
+        shell: bash
+        run: |
+          cat "${{ steps.manifest.outputs.manifest }}"
+          python3 - "${{ steps.manifest.outputs.manifest }}" <<'EOF'
+          import json, sys
+          m = json.load(open(sys.argv[1]))
+          assert m["schema"] == 1 and m["version"] == "1.2.3" and m["prerelease"] is False, m
+          assert m["commit"], m
+          assert sorted(a["format"] for a in m["assets"]) == ["deb", "dmg", "msi", "tar.gz"], m
+          assert [a["file"] for a in m["assets"]] == sorted(a["file"] for a in m["assets"]), m
+          assert all(len(a["sha256"]) == 64 and a["size"] > 0 for a in m["assets"]), m
+          EOF
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
