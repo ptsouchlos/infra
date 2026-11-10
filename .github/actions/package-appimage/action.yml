@@ -1,0 +1,77 @@
+name: Package an AppImage
+description: Assemble an AppDir from prebuilt binaries, a desktop file and a PNG icon, build an AppImage with appimagetool, write a .sha256, and optionally upload both to a GitHub release. Linux runners only.
+inputs:
+  bin-dir:
+    description: Directory holding the prebuilt binaries, for example the cargo-release bin-dir output. Every file goes to usr/bin in the image.
+    required: true
+  exe:
+    description: File in bin-dir that the default AppRun starts. Running the image under another binary's name (a symlink), or passing that name as the first argument, starts that binary instead.
+    required: true
+  desktop-file:
+    description: Path to the .desktop file. Its Icon= names the icon.
+    required: true
+  icon:
+    description: Path to a PNG icon.
+    required: true
+  arch:
+    description: "Target architecture of the binaries: x86_64 or aarch64."
+    required: true
+  name:
+    description: Asset base name; the image is written as <name>.AppImage.
+    required: true
+  apprun:
+    description: Path to a custom AppRun script that replaces the default one.
+    default: ""
+  metainfo:
+    description: Path to an AppStream metainfo file, validated by appimagetool when set.
+    default: ""
+  out-dir:
+    description: Directory the image and checksum are written to.
+    default: dist
+  appimagetool-version:
+    description: appimagetool release to install.
+    default: "1.9.1"
+  appimagetool-sha256:
+    description: sha256 of that release's AppImage for the runner's architecture. Only needed for a version other than the built-in default.
+    default: ""
+  release:
+    description: Upload the image and checksum to the GitHub release for the current tag.
+    default: "false"
+outputs:
+  asset:
+    description: Path of the AppImage.
+    value: ${{ steps.pkg.outputs.asset }}
+  checksum:
+    description: Path of the AppImage's .sha256 file.
+    value: ${{ steps.pkg.outputs.checksum }}
+runs:
+  using: composite
+  steps:
+    - name: Install appimagetool
+      shell: bash
+      env:
+        TOOL_VERSION: ${{ inputs.appimagetool-version }}
+        TOOL_SHA256: ${{ inputs.appimagetool-sha256 }}
+      run: bash "${{ github.action_path }}/install.sh"
+    - name: Package
+      id: pkg
+      shell: bash
+      env:
+        BIN_DIR: ${{ inputs.bin-dir }}
+        EXE: ${{ inputs.exe }}
+        DESKTOP_FILE: ${{ inputs.desktop-file }}
+        ICON: ${{ inputs.icon }}
+        ARCH: ${{ inputs.arch }}
+        NAME: ${{ inputs.name }}
+        APPRUN: ${{ inputs.apprun }}
+        METAINFO: ${{ inputs.metainfo }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: bash "${{ github.action_path }}/package.sh"
+    - name: Upload to the release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          ${{ steps.pkg.outputs.asset }}
+          ${{ steps.pkg.outputs.checksum }}
+        prerelease: ${{ contains(github.ref_name, '-') }}

@@ -432,6 +432,79 @@ jobs:
           docker run --rm -v "$PWD/dist:/dist:ro" fedora:latest bash -c \
             'dnf install -y --nogpgcheck /dist/demo-1.2.3-linux-${{ matrix.arch }}.rpm && ${{ steps.bin.outputs.name }}'
 
+  # package-appimage on the demo crate: the image runs (extracted, since runners have no FUSE) and
+  # starts the main binary by default, and under a second binary's name via a symlink.
+  package-appimage:
+    name: package-appimage (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, arch: x86_64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: aarch64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: ""
+          targets: ${{ matrix.target }}
+      - name: Read the binary name
+        id: bin
+        shell: bash
+        run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/cargo-release
+        id: release
+        with:
+          target: ${{ matrix.target }}
+          bin: ${{ steps.bin.outputs.name }}
+          working-directory: _demo/rust-basic
+      - name: Write the desktop file and icon
+        shell: bash
+        run: |
+          cat > demo.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Demo
+          Exec=${{ steps.bin.outputs.name }}
+          Icon=demo
+          Categories=Utility;
+          EOF
+          python - <<'EOF'
+          import struct, zlib
+          def chunk(tag, data):
+              body = tag + data
+              return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+          rows = b"".join(b"\x00" + b"\x33\x66\xcc" * 64 for _ in range(64))
+          png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 64, 8, 2, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+          open("demo.png", "wb").write(png)
+          EOF
+      - uses: ./.github/actions/package-appimage
+        id: pkg
+        with:
+          bin-dir: ${{ steps.release.outputs.bin-dir }}
+          exe: ${{ steps.bin.outputs.name }}
+          desktop-file: demo.desktop
+          icon: demo.png
+          arch: ${{ matrix.arch }}
+          name: demo-1.2.3-linux-${{ matrix.arch }}
+      - name: Verify and run the image
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          cd dist
+          sha256sum -c demo-1.2.3-linux-${{ matrix.arch }}.AppImage.sha256
+          ./demo-1.2.3-linux-${{ matrix.arch }}.AppImage
+          # Naming the binary as the first argument starts it too.
+          ./demo-1.2.3-linux-${{ matrix.arch }}.AppImage ${{ steps.bin.outputs.name }}
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
