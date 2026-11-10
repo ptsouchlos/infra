@@ -1,0 +1,65 @@
+name: Package a Windows installer
+description: Build an .msi with WiX (v4 or later) from a caller-supplied .wxs and a directory of prebuilt binaries, write a .sha256, and optionally upload both to a GitHub release. Windows runners only. Signing is not done yet.
+inputs:
+  bin-dir:
+    description: Directory holding the prebuilt binaries, for example the cargo-release bin-dir output. The .wxs reads it as $(BinDir).
+    required: true
+  wxs:
+    description: "Path to the WiX source. It receives the preprocessor variables $(BinDir) and $(Version), so it needs no hard-coded paths or versions."
+    required: true
+  version:
+    description: App version, without a leading v. Any prerelease or build suffix is dropped for the MSI version, which allows only dotted numbers.
+    required: true
+  name:
+    description: Asset base name; the installer is written as <name>.msi.
+    required: true
+  arch:
+    description: Target architecture for wix build, x64 or arm64.
+    default: x64
+  defines:
+    description: Extra WiX preprocessor definitions, one NAME=value per line.
+    default: ""
+  wix-version:
+    description: WiX dotnet tool version to install. Must be 4.0.0 or later.
+    default: 5.0.2
+  out-dir:
+    description: Directory the msi and checksum are written to.
+    default: dist
+  release:
+    description: Upload the msi and checksum to the GitHub release for the current tag.
+    default: "false"
+outputs:
+  asset:
+    description: Path of the .msi.
+    value: ${{ steps.pkg.outputs.asset }}
+  checksum:
+    description: Path of the msi's .sha256 file.
+    value: ${{ steps.pkg.outputs.checksum }}
+runs:
+  using: composite
+  steps:
+    - name: Install WiX
+      shell: bash
+      env:
+        WIX_VERSION: ${{ inputs.wix-version }}
+      run: bash "${{ github.action_path }}/install.sh"
+    - name: Package
+      id: pkg
+      shell: bash
+      env:
+        BIN_DIR: ${{ inputs.bin-dir }}
+        WXS: ${{ inputs.wxs }}
+        NAME: ${{ inputs.name }}
+        VERSION: ${{ inputs.version }}
+        ARCH: ${{ inputs.arch }}
+        EXTRA_DEFINES: ${{ inputs.defines }}
+        OUT_DIR: ${{ inputs.out-dir }}
+      run: bash "${{ github.action_path }}/package.sh"
+    - name: Upload to the release
+      if: inputs.release == 'true'
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          ${{ steps.pkg.outputs.asset }}
+          ${{ steps.pkg.outputs.checksum }}
+        prerelease: ${{ contains(github.ref_name, '-') }}
