@@ -705,6 +705,7 @@ jobs:
           version: 1.2.3-rc.1
           name: demo-1.2.3-windows-x86_64
           defines: Exe=${{ steps.bin.outputs.name }}.exe
+          accept-eula: wix7
       - name: Verify the msi
         shell: bash
         run: |

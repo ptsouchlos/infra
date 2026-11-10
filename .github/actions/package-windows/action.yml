@@ -19,9 +19,12 @@ inputs:
   defines:
     description: Extra WiX preprocessor definitions, one NAME=value per line.
     default: ""
+  accept-eula:
+    description: "WiX Open Source Maintenance Fee EULA id to accept, passed as `wix build -acceptEula <id>`. WiX 7 requires it (wix7); the EULA exempts projects earning under US$10,000 a year and asks for a maintenance fee beyond that. Left empty on purpose: the caller accepts the terms, not this action. Not needed for WiX 5 and earlier."
+    default: ""
   wix-version:
-    description: WiX dotnet tool version to install. 4.x and 5.x are MS-RL with no fee. WiX 6 and later fall under the Open Source Maintenance Fee; the v7 EULA exempts projects earning under US$10,000 a year, and its terms must be accepted explicitly.
-    default: 5.0.2
+    description: WiX dotnet tool version to install. 4.x and 5.x are MS-RL with no fee; WiX 6 and later fall under the Open Source Maintenance Fee, and 7 needs accept-eula.
+    default: 7.0.1
   out-dir:
     description: Directory the msi and checksum are written to.
     default: dist
@@ -53,6 +56,7 @@ runs:
         VERSION: ${{ inputs.version }}
         ARCH: ${{ inputs.arch }}
         EXTRA_DEFINES: ${{ inputs.defines }}
+        ACCEPT_EULA: ${{ inputs.accept-eula }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: bash "${{ github.action_path }}/package.sh"
     - name: Upload to the release

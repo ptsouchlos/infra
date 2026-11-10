@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Build an .msi with WiX from a caller-supplied .wxs and a directory of prebuilt binaries.
 # Inputs arrive as environment variables so the action and the unit tests share one path:
-#   BIN_DIR WXS NAME VERSION ARCH OUT_DIR EXTRA_DEFINES
+#   BIN_DIR WXS NAME VERSION ARCH OUT_DIR EXTRA_DEFINES ACCEPT_EULA
+# ACCEPT_EULA is the WiX Open Source Maintenance Fee EULA id (wix7 for WiX 7), passed as
+# `wix build -acceptEula <id>`. WiX 7 refuses to build without it; empty omits the switch.
 # The .wxs receives these preprocessor variables, so it can stay free of paths and versions:
 #   $(BinDir) the directory holding the binaries, $(Version) the MSI version (1.2.3, with any
 #   prerelease or build suffix dropped, since Windows Installer wants up to four numeric fields).
@@ -19,6 +21,7 @@ set -euo pipefail
 : "${ARCH:=x64}"
 : "${OUT_DIR:=dist}"
 : "${EXTRA_DEFINES:=}"
+: "${ACCEPT_EULA:=}"
 : "${GITHUB_OUTPUT:=/dev/null}"
 
 if [ ! -d "$BIN_DIR" ]; then
@@ -59,7 +62,11 @@ winpath() {
 }
 bin_abs="$(cd "$BIN_DIR" && pwd)"
 
-args=(build -arch "$ARCH" -d "BinDir=$(winpath "$bin_abs")" -d "Version=$msi_version")
+args=(build)
+if [ -n "$ACCEPT_EULA" ]; then
+    args+=(-acceptEula "$ACCEPT_EULA")
+fi
+args+=(-arch "$ARCH" -d "BinDir=$(winpath "$bin_abs")" -d "Version=$msi_version")
 while IFS= read -r line; do
     if [ -n "$line" ]; then
         args+=(-d "$line")

@@ -1597,9 +1597,9 @@ class PackageWindowsInstallScript(unittest.TestCase):
     script = ACTIONS / "package-windows" / "install.sh"
 
     def test_dry_run_pins_the_wix_version(self):
-        r = run_script(self.script, {"DRY_RUN": "1", "WIX_VERSION": "5.0.2"})
+        r = run_script(self.script, {"DRY_RUN": "1", "WIX_VERSION": "7.0.1"})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("dotnet tool install wix --version 5.0.2", r.stdout)
+        self.assertIn("dotnet tool install wix --version 7.0.1", r.stdout)
 
     def test_version_is_required(self):
         r = run_script(self.script, {"DRY_RUN": "1", "WIX_VERSION": ""})
@@ -1669,6 +1669,14 @@ class PackageWindowsScript(unittest.TestCase):
         self.run_package(EXTRA_DEFINES="Manufacturer=Example Co\n\nUpgradeCode=abc-123\n")
         self.assertIn("Manufacturer=Example Co", self.wix)
         self.assertIn("UpgradeCode=abc-123", self.wix)
+
+    def test_accept_eula_is_passed_to_wix_build(self):
+        self.run_package(ACCEPT_EULA="wix7")
+        self.assertEqual(self.wix[:3], ["build", "-acceptEula", "wix7"])
+
+    def test_no_eula_switch_unless_asked_for(self):
+        self.run_package()
+        self.assertNotIn("-acceptEula", self.wix)
 
     def test_arm64_is_passed_through(self):
         self.run_package(ARCH="arm64")
