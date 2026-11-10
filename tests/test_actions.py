@@ -1671,7 +1671,7 @@ class PackageWindowsScript(unittest.TestCase):
         self.assertIn("UpgradeCode=abc-123", self.wix)
 
     def test_accept_eula_is_passed_to_wix_build(self):
-        self.run_package(ACCEPT_EULA="wix7")
+        self.run_package(WIX_ACCEPT_EULA="wix7")
         self.assertEqual(self.wix[:3], ["build", "-acceptEula", "wix7"])
 
     def test_no_eula_switch_unless_asked_for(self):

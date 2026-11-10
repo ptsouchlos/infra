@@ -56,7 +56,7 @@ runs:
         VERSION: ${{ inputs.version }}
         ARCH: ${{ inputs.arch }}
         EXTRA_DEFINES: ${{ inputs.defines }}
-        ACCEPT_EULA: ${{ inputs.accept-eula }}
+        WIX_ACCEPT_EULA: ${{ inputs.accept-eula }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: bash "${{ github.action_path }}/package.sh"
     - name: Upload to the release

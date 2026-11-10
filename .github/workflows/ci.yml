@@ -685,7 +685,7 @@ jobs:
               <MediaTemplate EmbedCab="yes" />
               <StandardDirectory Id="LocalAppDataFolder">
                 <Directory Id="INSTALLFOLDER" Name="Demo">
-                  <Component Id="MainExe" Guid="*">
+                  <Component Id="MainExe" Guid="3b8e5c1a-72d4-4f09-a6e1-9c0d2b7f4a15">
                     <File Source="$(BinDir)\$(Exe)" />
                     <RegistryValue Root="HKCU" Key="Software\Example\Demo" Name="installed"
                                    Type="integer" Value="1" KeyPath="yes" />
