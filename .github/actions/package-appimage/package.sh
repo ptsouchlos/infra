@@ -101,7 +101,8 @@ if [ -n "${APPIMAGE_RUNTIME_DIR:-}" ]; then
     args+=(--runtime-file "$APPIMAGE_RUNTIME_DIR/runtime-$ARCH")
 fi
 echo "::group::package"
-ARCH="$ARCH" appimagetool "${args[@]}" "$appdir" "$asset"
+# ${args[@]+...}: an empty array is an unbound variable under set -u in bash < 4.4 (macOS).
+ARCH="$ARCH" appimagetool ${args[@]+"${args[@]}"} "$appdir" "$asset"
 echo "::endgroup::"
 if [ ! -f "$asset" ]; then
     echo "::error::appimagetool did not write '$asset'"
