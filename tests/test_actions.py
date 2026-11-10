@@ -45,7 +45,7 @@ class ActionStructure(unittest.TestCase):
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
              "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
-             "package-appimage", "package-flatpak", "package-macos"},
+             "package-appimage", "package-flatpak", "package-macos", "package-windows"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -1591,6 +1591,117 @@ class PackageMacosScript(unittest.TestCase):
         r = self.run_package(INFO_PLIST="/nonexistent/Info.plist")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("info-plist", r.stdout + r.stderr)
+
+
+class PackageWindowsInstallScript(unittest.TestCase):
+    script = ACTIONS / "package-windows" / "install.sh"
+
+    def test_dry_run_pins_the_wix_version(self):
+        r = run_script(self.script, {"DRY_RUN": "1", "WIX_VERSION": "7.0.1"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("dotnet tool install wix --version 7.0.1", r.stdout)
+
+    def test_version_is_required(self):
+        r = run_script(self.script, {"DRY_RUN": "1", "WIX_VERSION": ""})
+        self.assertNotEqual(r.returncode, 0)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake wix on PATH")
+class PackageWindowsScript(unittest.TestCase):
+    """package.sh against a fake wix; the package-windows CI job runs the real one."""
+    script = ACTIONS / "package-windows" / "package.sh"
+
+    def run_package(self, **env):
+        """Sets self.wix (the arguments of the wix call), self.out_files and self.gh_output."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            wix = fake / "wix"
+            wix.write_text(
+                "#!/usr/bin/env bash\n"
+                f'printf "%s\\n" "$@" > "{d}/wix"\n'
+                'while [ $# -gt 0 ]; do [ "$1" = -o ] && echo msi > "$2"; shift; done\n')
+            wix.chmod(0o755)
+            binaries = d / "bins"
+            binaries.mkdir()
+            (binaries / "tool.exe").write_text("MZ")
+            (d / "tool.wxs").write_text("<Wix/>")
+            gh_output = d / "gh_output"
+            gh_output.touch()
+            out = d / "dist"
+            full = {"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                    "BIN_DIR": str(binaries), "WXS": str(d / "tool.wxs"),
+                    "NAME": "tool-1.2.3-windows-x86_64", "VERSION": "1.2.3",
+                    "OUT_DIR": str(out), "GITHUB_OUTPUT": str(gh_output), **env}
+            result = run_script(self.script, full)
+            wix_args = d / "wix"
+            self.wix = wix_args.read_text().splitlines() if wix_args.exists() else []
+            self.out_files = sorted(p.name for p in out.glob("*")) if out.exists() else []
+            self.gh_output = gh_output.read_text()
+            self.bins = str(binaries)
+            return result
+
+    def test_builds_the_msi_and_checksum(self):
+        r = self.run_package()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.out_files, ["tool-1.2.3-windows-x86_64.msi",
+                                          "tool-1.2.3-windows-x86_64.msi.sha256"])
+        self.assertIn("asset=", self.gh_output)
+        self.assertIn("checksum=", self.gh_output)
+
+    def test_passes_bindir_version_and_arch_to_wix(self):
+        self.run_package()
+        self.assertEqual(self.wix[0], "build")
+        self.assertEqual(self.wix[self.wix.index("-arch") + 1], "x64")
+        defines = [self.wix[i + 1] for i, a in enumerate(self.wix) if a == "-d"]
+        self.assertIn("Version=1.2.3", defines)
+        self.assertTrue(any(x.startswith("BinDir=") and x.endswith("bins") for x in defines), defines)
+        self.assertTrue(self.wix[-1].endswith("tool.wxs"))
+
+    def test_prerelease_and_build_suffixes_are_dropped_from_the_msi_version(self):
+        for version in ("1.2.3-rc.1", "1.2.3+build.5", "1.2.3-rc.1+build.5"):
+            with self.subTest(version=version):
+                self.run_package(VERSION=version)
+                self.assertIn("Version=1.2.3", self.wix)
+
+    def test_extra_defines_are_passed_one_per_line(self):
+        self.run_package(EXTRA_DEFINES="Manufacturer=Example Co\n\nUpgradeCode=abc-123\n")
+        self.assertIn("Manufacturer=Example Co", self.wix)
+        self.assertIn("UpgradeCode=abc-123", self.wix)
+
+    def test_accept_eula_is_passed_to_wix_build(self):
+        self.run_package(WIX_ACCEPT_EULA="wix7")
+        self.assertEqual(self.wix[:3], ["build", "-acceptEula", "wix7"])
+
+    def test_no_eula_switch_unless_asked_for(self):
+        self.run_package()
+        self.assertNotIn("-acceptEula", self.wix)
+
+    def test_arm64_is_passed_through(self):
+        self.run_package(ARCH="arm64")
+        self.assertEqual(self.wix[self.wix.index("-arch") + 1], "arm64")
+
+    def test_unknown_arch_fails_before_wix_runs(self):
+        r = self.run_package(ARCH="ppc")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("::error::", r.stdout + r.stderr)
+        self.assertEqual(self.wix, [])
+
+    def test_non_numeric_version_fails(self):
+        r = self.run_package(VERSION="latest")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.wix, [])
+
+    def test_missing_wxs_fails(self):
+        r = self.run_package(WXS="/nonexistent/tool.wxs")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("wxs", r.stdout + r.stderr)
+
+    def test_missing_bin_dir_fails(self):
+        r = self.run_package(BIN_DIR="/nonexistent/bins")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("bin-dir", r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

@@ -652,6 +652,74 @@ jobs:
           "$mnt/Demo.app/Contents/MacOS/${{ steps.bin.outputs.name }}"
           hdiutil detach "$mnt"
 
+  package-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: ""
+          targets: x86_64-pc-windows-msvc
+      - name: Read the binary name
+        id: bin
+        shell: bash
+        run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/cargo-release
+        id: release
+        with:
+          target: x86_64-pc-windows-msvc
+          bin: ${{ steps.bin.outputs.name }}
+          working-directory: _demo/rust-basic
+      - name: Write the WiX source
+        shell: bash
+        run: |
+          cat > demo.wxs <<'EOF'
+          <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+            <Package Name="Demo" Manufacturer="Example" Version="$(Version)"
+                     UpgradeCode="6f1d2a54-8b0e-4c36-9a57-3d2f7e1b9c40" Scope="perUser">
+              <MediaTemplate EmbedCab="yes" />
+              <StandardDirectory Id="LocalAppDataFolder">
+                <Directory Id="INSTALLFOLDER" Name="Demo">
+                  <Component Id="MainExe" Guid="3b8e5c1a-72d4-4f09-a6e1-9c0d2b7f4a15">
+                    <File Source="$(BinDir)\$(Exe)" />
+                    <RegistryValue Root="HKCU" Key="Software\Example\Demo" Name="installed"
+                                   Type="integer" Value="1" KeyPath="yes" />
+                    <RemoveFolder Id="RemoveInstallDir" On="uninstall" />
+                  </Component>
+                </Directory>
+              </StandardDirectory>
+              <Feature Id="Main"><ComponentRef Id="MainExe" /></Feature>
+            </Package>
+          </Wix>
+          EOF
+      - uses: ./.github/actions/package-windows
+        id: pkg
+        with:
+          bin-dir: ${{ steps.release.outputs.bin-dir }}
+          wxs: demo.wxs
+          version: 1.2.3-rc.1
+          name: demo-1.2.3-windows-x86_64
+          defines: Exe=${{ steps.bin.outputs.name }}.exe
+          accept-eula: wix7
+      - name: Verify the msi
+        shell: bash
+        run: |
+          cd dist
+          sha256sum -c demo-1.2.3-windows-x86_64.msi.sha256
+          msi="$(cygpath -w "$PWD/demo-1.2.3-windows-x86_64.msi")"
+          # Per-user, so no elevation is needed: install, run the binary, uninstall.
+          cmd //c "msiexec /i $msi /qn /l*v install.log" || { cat install.log; exit 1; }
+          exe="$LOCALAPPDATA/Demo/${{ steps.bin.outputs.name }}.exe"
+          test -f "$exe"
+          "$exe"
+          cmd //c "msiexec /x $msi /qn /l*v uninstall.log" || { cat uninstall.log; exit 1; }
+          test ! -e "$exe"
+
   # The cargo-build action on every runner and build type; rust-build.yml only wraps it in a matrix.
   rust-build:
     name: rust-build (${{ matrix.os }}, ${{ matrix.build-type }})
