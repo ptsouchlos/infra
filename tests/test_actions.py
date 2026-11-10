@@ -44,7 +44,7 @@ class ActionStructure(unittest.TestCase):
         self.assertEqual(
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
-             "build-docs", "update-infra", "cargo-release"},
+             "cargo-deps", "build-docs", "update-infra", "cargo-release"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -689,6 +689,52 @@ class CargoBuildRealScript(unittest.TestCase):
                     self.assertIn(f"::group::build ({build_type})", result.stdout)
                     self.assertIn(f"::group::test ({build_type})", result.stdout)
             self.assertTrue((out / "target" / "release").is_dir())
+
+
+class CargoDepsAction(unittest.TestCase):
+    path = ACTIONS / "cargo-deps" / "action.yml"
+
+    def setUp(self):
+        self.text = self.path.read_text(encoding="utf-8")
+
+    def test_each_check_has_its_own_switch(self):
+        self.assertIn("if: inputs.deny == 'true'", self.text)
+        self.assertIn("if: inputs.machete == 'true'", self.text)
+
+    def test_advisories_are_off_by_default(self):
+        self.assertRegex(self.text, r"(?ms)^  deny-checks:.*?default: licenses bans sources\n")
+        self.assertNotRegex(self.text, r"default: .*advisories")
+
+    def test_the_directory_reaches_both_tools(self):
+        self.assertIn("manifest-path: ${{ inputs.working-directory }}/Cargo.toml", self.text)
+        self.assertIn("args: ${{ inputs.machete-args }} ${{ inputs.working-directory }}", self.text)
+
+    def test_says_it_needs_linux(self):
+        self.assertIn("Linux runners only", self.text)
+
+
+@unittest.skipUnless(shutil.which("just"), "just is required")
+class DepsRecipes(unittest.TestCase):
+    def dry_run(self, recipe, **env):
+        with tempfile.TemporaryDirectory() as d:
+            justfile = Path(d) / "justfile"
+            justfile.write_text(f"import '{(ROOT / 'rust' / 'just' / 'deps.just').as_posix()}'\n")
+            result = subprocess.run(
+                ["just", "--justfile", str(justfile), "--dry-run", recipe],
+                env={**os.environ, **env}, capture_output=True, text=True)
+            return result
+
+    def test_deny_checks_licenses_bans_and_sources_by_default(self):
+        result = self.dry_run("deny")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("cargo deny check licenses bans sources", result.stderr)
+
+    def test_deny_checks_can_be_overridden(self):
+        result = self.dry_run("deny", DENY_CHECKS="advisories")
+        self.assertIn("cargo deny check advisories", result.stderr)
+
+    def test_machete(self):
+        self.assertIn("cargo machete", self.dry_run("machete").stderr)
 
 
 class RustBuildWorkflow(unittest.TestCase):

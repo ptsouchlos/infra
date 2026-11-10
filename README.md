@@ -130,12 +130,18 @@ import 'infra/rust/just/clippy.just'
 | `cargo.just` | `build`, `build-release`, `run`, `run-release`, `test`, `check`, `clean`, `list-bins`, `list-targets` |
 | `format.just` | `format`, `format-check` |
 | `clippy.just` | `lint` |
+| `deps.just` | `deny`, `machete` (need `cargo install cargo-deny cargo-machete`) |
 
 `build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Set `CARGO_BIN` to
 build or run a single binary of a multi-binary package (`CARGO_BIN=my-tool just run`); without it,
 cargo's own default applies, and `run` needs a `default-run` when the package has several binaries.
 Extra arguments pass through to cargo, so `just run -- --flag` hands `--flag` to your program and
 `just build --target <triple>` or `just build --example demo` work too.
+
+`deny` checks `licenses bans sources`; set `DENY_CHECKS` to change that, for example
+`DENY_CHECKS=advisories just deny`. The `cargo-deps` action leaves advisories out by default, since
+they fail pull requests for problems the change did not cause. Run them in a scheduled job with
+`deny-checks: advisories`.
 
 `list-bins` prints every binary in the workspace as `package<TAB>binary`, and `list-targets` prints
 every target (lib, bin, example, test, bench) with its kinds. Both read `cargo metadata` and need
@@ -158,6 +164,7 @@ See [tests/README.md](tests/README.md).
 | `setup-rust` | `toolchain`, `components`, `targets`, `just` | rustup toolchain and targets (a Linux `-musl` target also installs `musl-tools`), cargo cache, optional `just` |
 | `cargo-release` | `target`, `bin`, `name`, `archive`, `working-directory`, `cargo-args`, `out-dir`, `release` | `cargo build --release` for one target, package (tar.gz, zip or the bare binary), write a `.sha256`, optionally upload to the tag's release |
 | `cargo-build` | `build-type`, `working-directory`, `test`, `bin`, `args` | `just build` (debug) or `just build-release`, then `just test` (with `--release` for release); needs `rust/just/cargo.just` imported and `just` installed |
+| `cargo-deps` | `deny`, `deny-checks`, `deny-args`, `machete`, `machete-args`, `working-directory` | cargo-deny (`licenses bans sources` by default) and cargo-machete (unused dependencies); Linux runners only; your repo supplies `deny.toml` |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
 | `update-infra` | `tag`, `token`, `branch` | moves the repo's infra embeds (and `@vN` action refs on a major) to a release, then opens or updates a PR |

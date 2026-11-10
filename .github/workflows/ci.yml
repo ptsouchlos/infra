@@ -378,6 +378,20 @@ jobs:
           build-type: ${{ matrix.build-type }}
           working-directory: _demo/rust-basic
 
+  # cargo-deny-action is a Docker action, so this runs on Linux only.
+  rust-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Generate the demo project
+        run: python tests/generate.py rust-basic _demo/rust-basic
+      - uses: ./.github/actions/cargo-deps
+        with:
+          working-directory: _demo/rust-basic
+
   docs:
     runs-on: ubuntu-latest
     steps:
