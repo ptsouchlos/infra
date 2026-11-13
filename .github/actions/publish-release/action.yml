@@ -25,12 +25,20 @@ inputs:
   draft:
     description: Leave the release as a draft after uploading instead of publishing it.
     default: "false"
+  attest:
+    description: Generate SLSA build provenance attestations for files under assets-dir. Needs id-token write and attestations write permissions.
+    default: "false"
   token:
     description: GitHub token with contents write permission.
     default: ${{ github.token }}
 runs:
   using: composite
   steps:
+    - name: Attest build provenance
+      if: inputs.attest == 'true'
+      uses: actions/attest-build-provenance@v2.4.0
+      with:
+        subject-path: ${{ inputs.assets-dir }}/**/*
     - name: Publish the release
       shell: bash
       env:

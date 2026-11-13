@@ -2031,5 +2031,17 @@ class PublishReleaseScript(unittest.TestCase):
                 self.assertEqual(self.calls, [])
 
 
+class PublishReleaseAction(unittest.TestCase):
+    path = ACTIONS / "publish-release" / "action.yml"
+
+    def setUp(self):
+        self.text = self.path.read_text(encoding="utf-8")
+
+    def test_attest_input_defaults_off_and_guards_attestation_step(self):
+        self.assertRegex(self.text, r"(?ms)^  attest:\n.*?default: \"false\"")
+        self.assertIn("if: inputs.attest == 'true'", self.text)
+        self.assertIn("actions/attest-build-provenance@v", self.text)
+
+
 if __name__ == "__main__":
     unittest.main()
