@@ -21,8 +21,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Run the unit tests
@@ -49,18 +49,18 @@ jobs:
           - { kind: cpp-sanitizers, platform: windows-msvc }
           - { kind: cpp-sanitizers, platform: windows-clang }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         shell: bash
         run: python tests/generate.py ${{ matrix.kind }} _demo/${{ matrix.kind }}
-      - uses: ./.github/actions/setup-cpp
+      - uses: $/.github/actions/setup-cpp
         with:
           compiler: ${{ matrix.compiler }}
           version: ${{ matrix.version }}
-      - uses: ./.github/actions/cmake-build
+      - uses: $/.github/actions/cmake-build
         with:
           source-dir: _demo/${{ matrix.kind }}
           build-dir: _demo/${{ matrix.kind }}/build
@@ -68,7 +68,7 @@ jobs:
           cpm-cache: "true"
       - name: Build the cpp-install consumer
         if: matrix.kind == 'cpp-install'
-        uses: ./.github/actions/cmake-build
+        uses: $/.github/actions/cmake-build
         with:
           source-dir: _demo/cpp-install/consumer
           build-dir: _demo/cpp-install/build/consumer
@@ -95,11 +95,11 @@ jobs:
           - { kind: cpp-vcpkg, os: ubuntu-latest, compiler: gcc, preset: gcc-debug-vcpkg, cxx: GNU }
           - { kind: cpp-vcpkg, os: windows-latest, compiler: msvc, preset: msvc-debug-vcpkg, cxx: MSVC }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: ./.github/actions/setup-cpp
+      - uses: $/.github/actions/setup-cpp
         with:
           compiler: ${{ matrix.compiler }}
       - name: Install tools
@@ -126,8 +126,8 @@ jobs:
           - { os: macos-latest, compiler: appleclang }
           - { os: windows-latest, compiler: msvc }
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-cpp
+      - uses: actions/checkout@v7.0.1
+      - uses: $/.github/actions/setup-cpp
         with:
           compiler: ${{ matrix.compiler }}
           vcpkg: "true"
@@ -146,11 +146,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: extractions/setup-just@v4
+      - uses: extractions/setup-just@v4.0.0
       - name: Run the cpp-just demo project
         run: python tests/run.py cpp-just --verbose
       - name: Run the cpp-just demo project through presets
@@ -160,14 +160,14 @@ jobs:
   just-min:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: extractions/setup-just@v4
+      - uses: extractions/setup-just@v4.0.0
         with:
           just-version: "1.27.0"
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
       - name: Run the just kinds on the oldest supported just
         shell: bash
         run: |
@@ -197,8 +197,8 @@ jobs:
           - { kind: cpp-ipo, os: macos-latest, label: "", args: "" }
           - { kind: cpp-ipo, os: windows-latest, label: "", args: "--set IPO_FLAG=" }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Install tools
@@ -221,11 +221,11 @@ jobs:
           - { platform: macos-appleclang, os: macos-latest, compiler: appleclang }
           - { platform: windows-msvc, os: windows-latest, compiler: msvc }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: ./.github/actions/setup-cpp
+      - uses: $/.github/actions/setup-cpp
         with:
           compiler: ${{ matrix.compiler }}
           version: ${{ matrix.version }}
@@ -255,11 +255,11 @@ jobs:
           - { platform: linux-gcc, os: ubuntu-26.04, compiler: gcc, version: "15" }
           - { platform: windows-msvc, os: windows-latest, compiler: msvc }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: ./.github/actions/setup-cpp
+      - uses: $/.github/actions/setup-cpp
         with:
           compiler: ${{ matrix.compiler }}
           version: ${{ matrix.version }}
@@ -283,17 +283,17 @@ jobs:
           - { os: ubuntu-latest, toolchain: "1.85" }   # oldest probed: first edition-2024 compiler
           - { os: ubuntu-latest, toolchain: stable, args: "--workspace --all-features" }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           toolchain: ${{ matrix.toolchain }}
           just: "true"
-      - uses: ./.github/actions/cargo-check
+      - uses: $/.github/actions/cargo-check
         with:
           working-directory: _demo/rust-basic
           args: ${{ matrix.args }}
@@ -315,13 +315,13 @@ jobs:
           - { os: macos-latest, target: aarch64-apple-darwin }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           targets: ${{ matrix.target }}
@@ -329,7 +329,7 @@ jobs:
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/cargo-release
+      - uses: $/.github/actions/cargo-release
         id: release
         with:
           target: ${{ matrix.target }}
@@ -371,13 +371,13 @@ jobs:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, arch: x86_64 }
           - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: aarch64 }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           targets: ${{ matrix.target }}
@@ -385,7 +385,7 @@ jobs:
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/cargo-release
+      - uses: $/.github/actions/cargo-release
         id: release
         with:
           target: ${{ matrix.target }}
@@ -406,7 +406,7 @@ jobs:
               dst: /usr/bin/${{ steps.bin.outputs.name }}
               expand: true
           EOF
-      - uses: ./.github/actions/package-nfpm
+      - uses: $/.github/actions/package-nfpm
         id: pkg
         with:
           config: nfpm-demo.yaml
@@ -444,13 +444,13 @@ jobs:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, arch: x86_64 }
           - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: aarch64 }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           targets: ${{ matrix.target }}
@@ -458,7 +458,7 @@ jobs:
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/cargo-release
+      - uses: $/.github/actions/cargo-release
         id: release
         with:
           target: ${{ matrix.target }}
@@ -485,7 +485,7 @@ jobs:
                  + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
           open("demo.png", "wb").write(png)
           EOF
-      - uses: ./.github/actions/package-appimage
+      - uses: $/.github/actions/package-appimage
         id: pkg
         with:
           bin-dir: ${{ steps.release.outputs.bin-dir }}
@@ -516,13 +516,13 @@ jobs:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, arch: x86_64 }
           - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: aarch64 }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           targets: ${{ matrix.target }}
@@ -530,7 +530,7 @@ jobs:
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/cargo-release
+      - uses: $/.github/actions/cargo-release
         id: release
         with:
           target: ${{ matrix.target }}
@@ -556,7 +556,7 @@ jobs:
                   path: bin
                   dest: bin
           EOF
-      - uses: ./.github/actions/package-flatpak
+      - uses: $/.github/actions/package-flatpak
         id: pkg
         with:
           manifest: packaging/io.example.Demo.yml
@@ -577,13 +577,13 @@ jobs:
   package-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           targets: aarch64-apple-darwin
@@ -591,7 +591,7 @@ jobs:
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/cargo-release
+      - uses: $/.github/actions/cargo-release
         id: release
         with:
           target: aarch64-apple-darwin
@@ -625,7 +625,7 @@ jobs:
                  + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
           open("demo.png", "wb").write(png)
           EOF
-      - uses: ./.github/actions/package-macos
+      - uses: $/.github/actions/package-macos
         id: pkg
         with:
           bin-dir: ${{ steps.release.outputs.bin-dir }}
@@ -655,13 +655,13 @@ jobs:
   package-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           targets: x86_64-pc-windows-msvc
@@ -669,7 +669,7 @@ jobs:
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/cargo-release
+      - uses: $/.github/actions/cargo-release
         id: release
         with:
           target: x86_64-pc-windows-msvc
@@ -697,7 +697,7 @@ jobs:
             </Package>
           </Wix>
           EOF
-      - uses: ./.github/actions/package-windows
+      - uses: $/.github/actions/package-windows
         id: pkg
         with:
           bin-dir: ${{ steps.release.outputs.bin-dir }}
@@ -723,7 +723,7 @@ jobs:
   release-manifest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Make throwaway assets, one folder each like download-artifact leaves them
         shell: bash
         run: |
@@ -734,7 +734,7 @@ jobs:
             echo "$file" > "assets/$1/$file"
             (cd "assets/$1" && sha256sum "$file" > "$file.sha256")
           done
-      - uses: ./.github/actions/release-manifest
+      - uses: $/.github/actions/release-manifest
         id: manifest
         with:
           assets-dir: assets
@@ -757,7 +757,7 @@ jobs:
   publish-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Make throwaway assets and a stub gh
         shell: bash
         run: |
@@ -776,13 +776,13 @@ jobs:
           EOF
           chmod +x "$RUNNER_TEMP/fakebin/gh"
           echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
-      - uses: ./.github/actions/release-manifest
+      - uses: $/.github/actions/release-manifest
         id: manifest
         with:
           assets-dir: assets
           name: demo
           version: 1.2.3
-      - uses: ./.github/actions/publish-release
+      - uses: $/.github/actions/publish-release
         with:
           assets-dir: assets
           manifest: ${{ steps.manifest.outputs.manifest }}
@@ -816,17 +816,17 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         build-type: [debug, release]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/setup-rust
+      - uses: $/.github/actions/setup-rust
         with:
           components: ""
           just: "true"
-      - uses: ./.github/actions/cargo-build
+      - uses: $/.github/actions/cargo-build
         with:
           build-type: ${{ matrix.build-type }}
           working-directory: _demo/rust-basic
@@ -835,26 +835,26 @@ jobs:
   rust-deps:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py rust-basic _demo/rust-basic
-      - uses: ./.github/actions/cargo-deps
+      - uses: $/.github/actions/cargo-deps
         with:
           working-directory: _demo/rust-basic
 
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Generate the demo project
         run: python tests/generate.py docs _demo/docs
-      - uses: ./.github/actions/build-docs
+      - uses: $/.github/actions/build-docs
         with:
           working-directory: _demo/docs
           html-dir: out/html
