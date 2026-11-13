@@ -4,6 +4,9 @@ inputs:
   bin-dir:
     description: Directory holding the prebuilt binaries, for example the cargo-release bin-dir output. Every file goes to Contents/MacOS in the bundle.
     required: true
+  merge-bin-dir:
+    description: Optional second bin-dir for another macOS architecture; matching binaries are combined with lipo into a universal Mach-O binary.
+    default: ""
   exe:
     description: File in bin-dir that is the bundle's main executable (CFBundleExecutable).
     required: true
@@ -49,6 +52,7 @@ runs:
       shell: bash
       env:
         BIN_DIR: ${{ inputs.bin-dir }}
+        MERGE_BIN_DIR: ${{ inputs.merge-bin-dir }}
         EXE: ${{ inputs.exe }}
         APP_NAME: ${{ inputs.app-name }}
         BUNDLE_ID: ${{ inputs.bundle-id }}
