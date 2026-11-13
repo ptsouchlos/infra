@@ -19,6 +19,9 @@ workflows:
     '.github/workflows/release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'
+    '.github/workflows/rust-advisories.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'ptsouchlos/infra@v1'
     '.github/workflows/rust-build.yml':
         - 'actions/checkout@v7.0.1'
         - 'ptsouchlos/infra@v1'
@@ -71,6 +74,11 @@ dependencies:
         commit: 'sha1-ac30a525c0a8d163a92d727b3ff079ee3f6ecb08'
         owner_id: 1180019
         repo_id: 420777439
+    'embarkstudios/cargo-deny-action@v2':
+        ref: 'v2'
+        commit: 'sha1-3c6349835b2b7b196a839186cb8b78e02f7b5f25'
+        owner_id: 44887257
+        repo_id: 228054692
     'embarkstudios/cargo-deny-action@v2.1.1':
         ref: 'v2.1.1'
         commit: 'sha1-3c6349835b2b7b196a839186cb8b78e02f7b5f25'
@@ -121,6 +129,8 @@ dependencies:
         owner_id: 6591180
         repo_id: 1270714317
         uses:
+            - 'bnjbvr/cargo-machete@v0.9.2'
+            - 'embarkstudios/cargo-deny-action@v2'
             - 'extractions/setup-just@v4'
             - 'peter-evans/create-pull-request@v8'
             - 'ptsouchlos/embd@v0'

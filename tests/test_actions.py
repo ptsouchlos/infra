@@ -783,6 +783,29 @@ class RustBuildWorkflow(unittest.TestCase):
                 self.assertRegex(ref, r"@v\d")
 
 
+class RustAdvisoriesWorkflow(unittest.TestCase):
+    path = ROOT / ".github" / "workflows" / "rust-advisories.yml"
+
+    def setUp(self):
+        self.text = self.path.read_text(encoding="utf-8")
+
+    def test_is_a_reusable_workflow(self):
+        self.assertRegex(self.text, r"(?m)^  workflow_call:")
+        for name in ("working-directory", "deny-args", "lfs"):
+            with self.subTest(input=name):
+                self.assertRegex(self.text, rf"(?m)^      {name}:")
+
+    def test_runs_cargo_deps_with_advisories_only(self):
+        self.assertIn("ptsouchlos/infra/.github/actions/cargo-deps@v1", self.text)
+        self.assertIn("deny-checks: advisories", self.text)
+        self.assertIn('machete: "false"', self.text)
+
+    def test_third_party_actions_are_version_pinned(self):
+        for ref in re.findall(r"(?m)^\s*-?\s*uses:\s*(\S+)", self.text):
+            with self.subTest(uses=ref):
+                self.assertRegex(ref, r"@v\d")
+
+
 @unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
 class CargoReleaseScript(unittest.TestCase):
     script = ACTIONS / "cargo-release" / "package.sh"
