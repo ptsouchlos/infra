@@ -1,0 +1,9 @@
+rules:
+  # Action references are pinned via .github/workflows/actions.lock.
+  unpinned-uses:
+    disable: true
+  # notify-consumers dispatches across repos with the uses-infra topic; update-infra runs in caller repos.
+  github-app:
+    ignore:
+      - release.yml
+      - update-infra.yml
