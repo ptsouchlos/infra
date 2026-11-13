@@ -219,6 +219,9 @@ jobs:
           - { kind: cpp-ipo, os: ubuntu-latest, label: "", args: "" }
           - { kind: cpp-ipo, os: macos-latest, label: "", args: "" }
           - { kind: cpp-ipo, os: windows-latest, label: "", args: "--set IPO_FLAG=" }
+          - { kind: cpp-in-source, os: ubuntu-latest, label: "", args: "" }
+          - { kind: cpp-toolchain, os: ubuntu-latest, label: " gnu", args: "--set TOOLCHAIN=gnu" }
+          - { kind: cpp-toolchain, os: ubuntu-latest, label: " llvm", args: "--set TOOLCHAIN=llvm" }
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.1.0

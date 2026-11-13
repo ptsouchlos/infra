@@ -42,10 +42,10 @@ Use the `--cmake-arg=...` form (with `=`) because the value starts with a dash.
 | `cpp-import-std` | `enable_import_std` lets `import std;` build (needs CMake 4.3 or newer, Ninja and a toolchain with a std module: gcc 15+, clang 18+ with libc++, or MSVC; not run on macOS). CI covers Windows MSVC and Linux gcc 15 (on the `ubuntu-26.04` runner, since gcc 15 is not packaged for Ubuntu 24.04). On the dev host both gcc 16 and clang 22 with `--cmake-arg=-DCMAKE_CXX_FLAGS=-stdlib=libc++` pass |
 | `cpp-in-source`, `cpp-warnings-error` | negative cases: the expected failure happens |
 | `rust-basic` | `rust/just/{format,clippy}.just` recipes |
+| `docs` | Doxygen builds from a plain `Doxyfile` |
 
 The `just` kinds need `just` 1.27.0 or newer (older versions reject the `[doc]` attribute); CI
 checks the floor with a `just-min` job.
-| `docs` | Doxygen builds from a plain `Doxyfile` |
 
 ## Add a kind
 
