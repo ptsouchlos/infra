@@ -54,9 +54,9 @@ print(w, h)
     echo "::error::icon '$ICON' is not a PNG"
     exit 1
 }
-set -- $size
-if [ "$1" != "$2" ] || [ "$1" -lt 1024 ]; then
-    echo "::error::icon must be a square PNG of at least 1024 pixels (got ${1}x${2})"
+read -r icon_w icon_h <<<"$size"
+if [ "$icon_w" != "$icon_h" ] || [ "$icon_w" -lt 1024 ]; then
+    echo "::error::icon must be a square PNG of at least 1024 pixels (got ${icon_w}x${icon_h})"
     exit 1
 fi
 

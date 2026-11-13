@@ -29,6 +29,29 @@ jobs:
         shell: bash
         run: python -m unittest discover -s tests
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Run shellcheck
+        shell: bash
+        run: find .github -name '*.sh' -print0 | xargs -0 shellcheck
+      - name: Run actionlint
+        shell: bash
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -ignore 'specifying action "\$/'
+      - name: Run zizmor
+        shell: bash
+        run: |
+          pip install --no-cache-dir zizmor==1.32.0
+          zizmor --config .github/zizmor.yml --min-severity=high .github/
+
   # Generates each demo project from tests/templates and drives it through the composite actions.
   cpp:
     name: ${{ matrix.kind }} (${{ matrix.platform }})
@@ -351,13 +374,15 @@ jobs:
             *) tar -xzf "$asset" -C extracted ;;
           esac
           ls extracted
-          ./extracted/${{ steps.bin.outputs.name }}*
+          set -- ./extracted/${{ steps.bin.outputs.name }}*
+          "$1"
       - name: Verify the staged binary directory
         shell: bash
         run: |
           dir='${{ steps.release.outputs.bin-dir }}'
           ls "$dir"
-          "$dir"/${{ steps.bin.outputs.name }}*
+          set -- "$dir"/${{ steps.bin.outputs.name }}*
+          "$1"
 
   # package-nfpm on the demo crate: the deb installs on the runner and the rpm in a Fedora
   # container, and the packaged binary runs from /usr/bin in both.
@@ -728,11 +753,11 @@ jobs:
         shell: bash
         run: |
           for spec in "deb linux-x86_64.deb" "dmg macos-aarch64.dmg" "msi windows-x86_64.msi" "tgz linux-x86_64.tar.gz"; do
-            set -- $spec
-            mkdir -p "assets/$1"
-            file="demo-1.2.3-$2"
-            echo "$file" > "assets/$1/$file"
-            (cd "assets/$1" && sha256sum "$file" > "$file.sha256")
+            read -r dir suffix <<<"$spec"
+            mkdir -p "assets/$dir"
+            file="demo-1.2.3-$suffix"
+            echo "$file" > "assets/$dir/$file"
+            (cd "assets/$dir" && sha256sum "$file" > "$file.sha256")
           done
       - uses: $/.github/actions/release-manifest
         id: manifest
@@ -762,11 +787,11 @@ jobs:
         shell: bash
         run: |
           for spec in "deb linux-x86_64.deb" "dmg macos-aarch64.dmg"; do
-            set -- $spec
-            mkdir -p "assets/$1"
-            file="demo-1.2.3-$2"
-            echo "$file" > "assets/$1/$file"
-            (cd "assets/$1" && sha256sum "$file" > "$file.sha256")
+            read -r dir suffix <<<"$spec"
+            mkdir -p "assets/$dir"
+            file="demo-1.2.3-$suffix"
+            echo "$file" > "assets/$dir/$file"
+            (cd "assets/$dir" && sha256sum "$file" > "$file.sha256")
           done
           mkdir -p "$RUNNER_TEMP/fakebin"
           cat > "$RUNNER_TEMP/fakebin/gh" <<'EOF'
