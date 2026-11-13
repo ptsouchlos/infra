@@ -26,4 +26,4 @@ runs:
       run: bash "${{ github.action_path }}/install.sh"
     - name: Set up the MSVC environment
       if: runner.os == 'Windows'
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: ilammy/msvc-dev-cmd@v1.13.0

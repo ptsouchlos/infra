@@ -33,12 +33,12 @@ runs:
   steps:
     - name: Restore ccache
       if: inputs.ccache == 'true'
-      uses: hendrikmuhs/ccache-action@v1.2
+      uses: hendrikmuhs/ccache-action@v1.2.20
       with:
         key: ${{ runner.os }}-${{ env.CC }}-${{ inputs.build-type }}
     - name: Restore the CPM cache
       if: inputs.cpm-cache == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache@v6.1.0
       with:
         path: ${{ github.workspace }}/.cpm-cache
         key: cpm-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}

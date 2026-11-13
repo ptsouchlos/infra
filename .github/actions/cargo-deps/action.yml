@@ -24,7 +24,7 @@ runs:
   steps:
     - name: cargo-deny
       if: inputs.deny == 'true'
-      uses: EmbarkStudios/cargo-deny-action@v2
+      uses: EmbarkStudios/cargo-deny-action@v2.1.1
       with:
         command: check ${{ inputs.deny-checks }}
         arguments: ${{ inputs.deny-args }}
