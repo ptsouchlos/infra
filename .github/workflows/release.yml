@@ -7,11 +7,28 @@ on:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  major-tag:
+  verify-ci:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify CI passed on tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ci.sh
+
+  major-tag:
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Move the major tag
