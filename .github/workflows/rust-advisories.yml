@@ -1,0 +1,45 @@
+name: Rust advisories
+
+# Reusable workflow: runs cargo-deny advisories against Cargo.toml. Intended to be called on a
+# schedule or manually, since advisory databases update independently of pull requests.
+#
+#   on:
+#     schedule:
+#       - cron: "0 7 * * 1"
+#     workflow_dispatch:
+#   jobs:
+#     advisories:
+#       uses: ptsouchlos/infra/.github/workflows/rust-advisories.yml@v1
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory containing Cargo.toml, relative to the repository root.
+        type: string
+        default: "."
+      deny-args:
+        description: Arguments for cargo-deny before the check command.
+        type: string
+        default: --all-features
+      lfs:
+        description: Fetch Git LFS files when checking out.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: ${{ inputs.lfs }}
+          persist-credentials: false
+      - uses: ptsouchlos/infra/.github/actions/cargo-deps@v1
+        with:
+          deny-checks: advisories
+          deny-args: ${{ inputs.deny-args }}
+          machete: "false"
+          working-directory: ${{ inputs.working-directory }}

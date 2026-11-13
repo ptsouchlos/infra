@@ -263,6 +263,26 @@ jobs:
 Add repo-specific steps, such as installing system libraries, by using `setup-rust` and
 `cargo-build` in your own matrix instead.
 
+To run `cargo-deny advisories` on a schedule without failing pull requests on upstream advisory
+updates, call the reusable `rust-advisories.yml` workflow:
+
+```yaml
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+jobs:
+  advisories:
+    uses: ptsouchlos/infra/.github/workflows/rust-advisories.yml@v1
+```
+
+| Input | Default | Does |
+| --- | --- | --- |
+| `working-directory` | `.` | directory containing `Cargo.toml` |
+| `deny-args` | `--all-features` | arguments passed to `cargo-deny` before `check` |
+| `lfs` | `false` | fetch Git LFS files when checking out |
+
 Notes:
 - `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.
 - `cargo-release` builds for the runner's own architecture only; cross-linking (for example x86_64 to aarch64) is not supported, so run each target on a matching runner.
