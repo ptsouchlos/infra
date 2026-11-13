@@ -1496,6 +1496,10 @@ class PackageMacosScript(unittest.TestCase):
                          'while [ $# -gt 0 ]; do [ "$1" = --out ] && echo icon > "$2"; shift; done\n')
             tool("iconutil", f'(cd "$3" && ls | sort) > "{d}/iconset"\necho icns > "$5"\n')
             tool("codesign", f'echo "$*" >> "{d}/codesign"\n')
+            tool("lipo",
+                 f'echo "$*" >> "{d}/lipo"\n'
+                 'while [ $# -gt 0 ]; do [ "$1" = -output ] && out="$2"; shift; done\n'
+                 'echo universal > "$out"\n')
             tool("hdiutil",
                  f'echo "$*" > "{d}/hdiutil"\n'
                  'args=("$@"); n=${#args[@]}\n'
@@ -1533,6 +1537,7 @@ class PackageMacosScript(unittest.TestCase):
                         self.stage.append(rel)
                         self.files[rel] = p.read_text(errors="replace")
             self.codesign = read("codesign")
+            self.lipo = read("lipo")
             self.sips = read("sips")
             self.iconset = read("iconset")
             self.hdiutil = " ".join(read("hdiutil"))
@@ -1615,6 +1620,29 @@ class PackageMacosScript(unittest.TestCase):
         r = self.run_package(INFO_PLIST="/nonexistent/Info.plist")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("info-plist", r.stdout + r.stderr)
+
+    def test_merge_bin_dir_combines_binaries_with_lipo(self):
+        with tempfile.TemporaryDirectory() as other:
+            other = Path(other)
+            (other / "tool").write_text("#!/bin/sh\n")
+            (other / "toolctl").write_text("#!/bin/sh\n")
+            r = self.run_package(MERGE_BIN_DIR=str(other))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(len(self.lipo), 2)
+        self.assertTrue(any("-create" in line and "/tool " in line for line in self.lipo))
+        self.assertTrue(any("-create" in line and "/toolctl " in line for line in self.lipo))
+
+    def test_missing_merge_bin_dir_fails(self):
+        r = self.run_package(MERGE_BIN_DIR="/nonexistent/merge-bins")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("merge-bin-dir", r.stdout + r.stderr)
+
+    def test_missing_binary_in_merge_bin_dir_fails(self):
+        with tempfile.TemporaryDirectory() as other:
+            (Path(other) / "tool").write_text("#!/bin/sh\n")
+            r = self.run_package(MERGE_BIN_DIR=other)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("toolctl", r.stdout + r.stderr)
 
 
 class PackageWindowsInstallScript(unittest.TestCase):

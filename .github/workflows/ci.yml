@@ -614,17 +614,25 @@ jobs:
       - uses: $/.github/actions/setup-rust
         with:
           components: ""
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin x86_64-apple-darwin
       - name: Read the binary name
         id: bin
         shell: bash
         run: echo "name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' _demo/rust-basic/Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: $/.github/actions/cargo-release
-        id: release
+        id: release-arm64
         with:
           target: aarch64-apple-darwin
           bin: ${{ steps.bin.outputs.name }}
           working-directory: _demo/rust-basic
+          out-dir: dist/arm64
+      - uses: $/.github/actions/cargo-release
+        id: release-x64
+        with:
+          target: x86_64-apple-darwin
+          bin: ${{ steps.bin.outputs.name }}
+          working-directory: _demo/rust-basic
+          out-dir: dist/x64
       - name: Write the Info.plist template and icon
         shell: bash
         run: |
@@ -656,32 +664,44 @@ jobs:
       - uses: $/.github/actions/package-macos
         id: pkg
         with:
-          bin-dir: ${{ steps.release.outputs.bin-dir }}
+          bin-dir: ${{ steps.release-arm64.outputs.bin-dir }}
+          merge-bin-dir: ${{ steps.release-x64.outputs.bin-dir }}
           exe: ${{ steps.bin.outputs.name }}
           app-name: Demo
           bundle-id: io.example.Demo
           version: 1.2.3
           info-plist: Info.plist
           icon: demo.png
-          name: demo-1.2.3-macos-aarch64
+          name: demo-1.2.3-macos-universal
       - name: Verify the dmg
         shell: bash
         run: |
           cd dist
-          shasum -a 256 -c demo-1.2.3-macos-aarch64.dmg.sha256
+          shasum -a 256 -c demo-1.2.3-macos-universal.dmg.sha256
           mnt="$RUNNER_TEMP/dmg-mount"
           mkdir -p "$mnt"
-          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" demo-1.2.3-macos-aarch64.dmg
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" demo-1.2.3-macos-universal.dmg
           ls -la "$mnt"
           test -L "$mnt/Applications"
           plutil -lint "$mnt/Demo.app/Contents/Info.plist"
           test -f "$mnt/Demo.app/Contents/Resources/Demo.icns"
           codesign --verify --deep --strict --verbose=2 "$mnt/Demo.app"
+          archs="$(lipo -archs "$mnt/Demo.app/Contents/MacOS/${{ steps.bin.outputs.name }}")"
+          echo "Universal archs: $archs"
+          echo "$archs" | grep -q x86_64
+          echo "$archs" | grep -q arm64
           "$mnt/Demo.app/Contents/MacOS/${{ steps.bin.outputs.name }}"
           hdiutil detach "$mnt"
 
   package-windows:
-    runs-on: windows-latest
+    name: package-windows (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, arch: x64, name-arch: x86_64 }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, arch: arm64, name-arch: arm64 }
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.1.0
@@ -692,7 +712,7 @@ jobs:
       - uses: $/.github/actions/setup-rust
         with:
           components: ""
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.target }}
       - name: Read the binary name
         id: bin
         shell: bash
@@ -700,7 +720,7 @@ jobs:
       - uses: $/.github/actions/cargo-release
         id: release
         with:
-          target: x86_64-pc-windows-msvc
+          target: ${{ matrix.target }}
           bin: ${{ steps.bin.outputs.name }}
           working-directory: _demo/rust-basic
       - name: Write the WiX source
@@ -731,15 +751,16 @@ jobs:
           bin-dir: ${{ steps.release.outputs.bin-dir }}
           wxs: demo.wxs
           version: 1.2.3-rc.1
-          name: demo-1.2.3-windows-x86_64
+          arch: ${{ matrix.arch }}
+          name: demo-1.2.3-windows-${{ matrix.name-arch }}
           defines: Exe=${{ steps.bin.outputs.name }}.exe
           accept-eula: wix7
       - name: Verify the msi
         shell: bash
         run: |
           cd dist
-          sha256sum -c demo-1.2.3-windows-x86_64.msi.sha256
-          msi="$(cygpath -w "$PWD/demo-1.2.3-windows-x86_64.msi")"
+          sha256sum -c demo-1.2.3-windows-${{ matrix.name-arch }}.msi.sha256
+          msi="$(cygpath -w "$PWD/demo-1.2.3-windows-${{ matrix.name-arch }}.msi")"
           # Per-user, so no elevation is needed: install, run the binary, uninstall.
           cmd //c "msiexec /i $msi /qn /l*v install.log" || { cat install.log; exit 1; }
           exe="$LOCALAPPDATA/Demo/${{ steps.bin.outputs.name }}.exe"

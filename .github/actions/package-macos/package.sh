@@ -2,7 +2,7 @@
 # Assemble a .app bundle from prebuilt binaries, an Info.plist template and a PNG icon, sign it,
 # and wrap it in a .dmg with an /Applications shortcut.
 # Inputs arrive as environment variables so the action and the unit tests share one path:
-#   BIN_DIR EXE APP_NAME BUNDLE_ID VERSION INFO_PLIST ICON NAME OUT_DIR SIGN_IDENTITY
+#   BIN_DIR MERGE_BIN_DIR EXE APP_NAME BUNDLE_ID VERSION INFO_PLIST ICON NAME OUT_DIR SIGN_IDENTITY
 # Runs on macOS (sips, iconutil, codesign and hdiutil), under the runner's bash 3.2: no mapfile,
 # no empty-array expansion under set -u.
 # Every file in BIN_DIR goes to Contents/MacOS; EXE is the bundle's main executable. INFO_PLIST
@@ -24,6 +24,7 @@ set -euo pipefail
 : "${ICON:?ICON is required}"
 : "${NAME:?NAME is required}"
 : "${OUT_DIR:=dist}"
+: "${MERGE_BIN_DIR:=}"
 : "${SIGN_IDENTITY:=-}"
 : "${GITHUB_OUTPUT:=/dev/null}"
 
@@ -68,7 +69,22 @@ trap 'rm -rf "$work"' EXIT
 app="$work/stage/$APP_NAME.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
-cp "$BIN_DIR"/* "$app/Contents/MacOS/"
+if [ -n "$MERGE_BIN_DIR" ]; then
+    if [ ! -d "$MERGE_BIN_DIR" ]; then
+        echo "::error::merge-bin-dir '$MERGE_BIN_DIR' does not exist"
+        exit 1
+    fi
+    for f in "$BIN_DIR"/*; do
+        base="$(basename "$f")"
+        if [ ! -f "$MERGE_BIN_DIR/$base" ]; then
+            echo "::error::'$base' is missing from merge-bin-dir '$MERGE_BIN_DIR'"
+            exit 1
+        fi
+        lipo -create "$f" "$MERGE_BIN_DIR/$base" -output "$app/Contents/MacOS/$base"
+    done
+else
+    cp "$BIN_DIR"/* "$app/Contents/MacOS/"
+fi
 chmod +x "$app/Contents/MacOS/"*
 
 # Icon: the ten sizes an .iconset needs, then iconutil folds them into one .icns.
