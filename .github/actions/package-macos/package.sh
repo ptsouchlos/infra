@@ -26,7 +26,24 @@ set -euo pipefail
 : "${OUT_DIR:=dist}"
 : "${MERGE_BIN_DIR:=}"
 : "${SIGN_IDENTITY:=-}"
+: "${NOTARIZE:=false}"
+: "${NOTARY_PROFILE:=}"
+: "${NOTARY_KEY_ID:=}"
+: "${NOTARY_ISSUER_ID:=}"
+: "${NOTARY_KEY:=}"
 : "${GITHUB_OUTPUT:=/dev/null}"
+
+case "$NOTARIZE" in
+    true | false) ;;
+    *)
+        echo "::error::notarize must be true or false (got '$NOTARIZE')"
+        exit 1
+        ;;
+esac
+if [ "$NOTARIZE" = true ] && [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "::error::notarize requires a Developer ID sign-identity (not '-')"
+    exit 1
+fi
 
 if [ ! -d "$BIN_DIR" ]; then
     echo "::error::bin-dir '$BIN_DIR' does not exist"
@@ -116,8 +133,6 @@ sed -e "s|@APP_NAME@|$APP_NAME|g" \
     "$INFO_PLIST" >"$app/Contents/Info.plist"
 
 # Signing. Nested executables first, then the bundle, so the bundle's seal covers them.
-# NOTARIZATION GOES HERE LATER: after signing with a Developer ID, zip the app, submit it with
-# `xcrun notarytool submit --wait`, then `xcrun stapler staple` the .app before the dmg is made.
 # An array, because a Developer ID identity has spaces in it. Never empty, so safe on bash 3.2.
 sign_args=(--force --sign "$SIGN_IDENTITY")
 if [ "$SIGN_IDENTITY" != "-" ]; then
@@ -131,6 +146,30 @@ codesign "${sign_args[@]}" "$app"
 codesign --verify --strict "$app"
 echo "::endgroup::"
 
+if [ "$NOTARIZE" = true ]; then
+    echo "::group::notarize"
+    notary_zip="$work/notarize.zip"
+    ditto -c -k --keepParent "$app" "$notary_zip"
+    if [ -n "$NOTARY_PROFILE" ]; then
+        xcrun notarytool submit "$notary_zip" --keychain-profile "$NOTARY_PROFILE" --wait
+    else
+        if [ -z "$NOTARY_KEY_ID" ] || [ -z "$NOTARY_ISSUER_ID" ] || [ -z "$NOTARY_KEY" ]; then
+            echo "::error::notarize requires notary-profile or notary-key-id, notary-issuer-id and notary-key"
+            exit 1
+        fi
+        if [ -f "$NOTARY_KEY" ]; then
+            key_file="$NOTARY_KEY"
+        else
+            key_file="$work/AuthKey.p8"
+            printf '%s\n' "$NOTARY_KEY" >"$key_file"
+            chmod 600 "$key_file"
+        fi
+        xcrun notarytool submit "$notary_zip" --key "$key_file" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait
+    fi
+    xcrun stapler staple "$app"
+    echo "::endgroup::"
+fi
+
 # The dmg: the app beside an /Applications shortcut, so installing is one drag.
 ln -s /Applications "$work/stage/Applications"
 asset="$out/$NAME.dmg"
@@ -141,6 +180,9 @@ echo "::endgroup::"
 if [ ! -f "$asset" ]; then
     echo "::error::hdiutil did not write '$asset'"
     exit 1
+fi
+if [ "$SIGN_IDENTITY" != "-" ]; then
+    codesign --force --sign "$SIGN_IDENTITY" --timestamp "$asset"
 fi
 
 base="$(basename "$asset")"

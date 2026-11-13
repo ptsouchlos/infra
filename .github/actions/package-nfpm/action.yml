@@ -25,6 +25,12 @@ inputs:
   nfpm-version:
     description: nFPM release to install, without the leading v.
     default: "2.48.0"
+  gpg-key:
+    description: Optional ASCII-armored GPG private key to write a detached .asc signature beside each package.
+    default: ""
+  gpg-passphrase:
+    description: Passphrase for gpg-key, if it is encrypted.
+    default: ""
   release:
     description: Upload the packages and checksums to the GitHub release for the current tag.
     default: "false"
@@ -35,6 +41,9 @@ outputs:
   checksums:
     description: Newline-separated paths of the .sha256 files.
     value: ${{ steps.pkg.outputs.checksums }}
+  signatures:
+    description: Newline-separated paths of the .asc signature files, when gpg-key is set.
+    value: ${{ steps.pkg.outputs.signatures }}
 runs:
   using: composite
   steps:
@@ -53,6 +62,8 @@ runs:
         ARCH: ${{ inputs.arch }}
         NAME: ${{ inputs.name }}
         FORMATS: ${{ inputs.formats }}
+        GPG_KEY: ${{ inputs.gpg-key }}
+        GPG_PASSPHRASE: ${{ inputs.gpg-passphrase }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: bash "${{ github.action_path }}/package.sh"
     - name: Upload to the release
@@ -62,4 +73,5 @@ runs:
         files: |
           ${{ steps.pkg.outputs.assets }}
           ${{ steps.pkg.outputs.checksums }}
+          ${{ steps.pkg.outputs.signatures }}
         prerelease: ${{ contains(github.ref_name, '-') }}

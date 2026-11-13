@@ -25,6 +25,15 @@ inputs:
   wix-version:
     description: WiX dotnet tool version to install. 4.x and 5.x are MS-RL with no fee; WiX 6 and later fall under the Open Source Maintenance Fee, and 7 needs accept-eula.
     default: 7.0.1
+  sign-cert:
+    description: Optional Authenticode PFX certificate (base64-encoded contents or path to a .pfx file). Signs binaries before wix build and the .msi after it.
+    default: ""
+  sign-password:
+    description: Password for sign-cert, if the PFX is password-protected.
+    default: ""
+  sign-timestamp-url:
+    description: RFC 3161 timestamp server URL passed to signtool /tr.
+    default: http://timestamp.digicert.com
   out-dir:
     description: Directory the msi and checksum are written to.
     default: dist
@@ -57,6 +66,9 @@ runs:
         ARCH: ${{ inputs.arch }}
         EXTRA_DEFINES: ${{ inputs.defines }}
         WIX_ACCEPT_EULA: ${{ inputs.accept-eula }}
+        SIGN_CERT: ${{ inputs.sign-cert }}
+        SIGN_PASSWORD: ${{ inputs.sign-password }}
+        SIGN_TIMESTAMP_URL: ${{ inputs.sign-timestamp-url }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: bash "${{ github.action_path }}/package.sh"
     - name: Upload to the release

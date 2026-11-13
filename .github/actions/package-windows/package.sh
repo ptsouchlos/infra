@@ -22,6 +22,9 @@ set -euo pipefail
 : "${OUT_DIR:=dist}"
 : "${EXTRA_DEFINES:=}"
 : "${WIX_ACCEPT_EULA:=}"
+: "${SIGN_CERT:=}"
+: "${SIGN_PASSWORD:=}"
+: "${SIGN_TIMESTAMP_URL:=http://timestamp.digicert.com}"
 : "${GITHUB_OUTPUT:=/dev/null}"
 
 if [ ! -d "$BIN_DIR" ]; then
@@ -62,6 +65,63 @@ winpath() {
 }
 bin_abs="$(cd "$BIN_DIR" && pwd)"
 
+work=""
+trap '[ -n "$work" ] && rm -rf "$work"' EXIT
+
+find_signtool() {
+    if command -v signtool >/dev/null 2>&1; then
+        command -v signtool
+        return
+    fi
+    if command -v signtool.exe >/dev/null 2>&1; then
+        command -v signtool.exe
+        return
+    fi
+    local sdk_arch="$ARCH"
+    local found=""
+    found="$(find "/c/Program Files (x86)/Windows Kits/10/bin" -path "*/$sdk_arch/signtool.exe" 2>/dev/null | sort -V | tail -n1 || true)"
+    printf '%s\n' "$found"
+}
+
+sign_file() {
+    local signtool="$1" pfx="$2" target="$3"
+    local sargs=(sign /fd SHA256 /tr "$SIGN_TIMESTAMP_URL" /td SHA256 /f "$(winpath "$pfx")")
+    if [ -n "$SIGN_PASSWORD" ]; then
+        sargs+=(/p "$SIGN_PASSWORD")
+    fi
+    sargs+=("$(winpath "$target")")
+    "$signtool" "${sargs[@]}"
+}
+
+signtool_bin=""
+pfx_file=""
+if [ -n "$SIGN_CERT" ]; then
+    signtool_bin="$(find_signtool)"
+    if [ -z "$signtool_bin" ]; then
+        echo "::error::signtool not found on PATH or in Windows Kits 10"
+        exit 1
+    fi
+    work="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/win-sign.XXXXXX")"
+    if [ -f "$SIGN_CERT" ]; then
+        pfx_file="$SIGN_CERT"
+    else
+        pfx_file="$work/cert.pfx"
+        if ! printf '%s' "$SIGN_CERT" | tr -d '[:space:]' | base64 -d >"$pfx_file" 2>/dev/null; then
+            printf '%s' "$SIGN_CERT" | tr -d '[:space:]' | base64 --decode >"$pfx_file"
+        fi
+    fi
+    mkdir -p "$work/bin"
+    cp "$bin_abs"/* "$work/bin/"
+    bin_abs="$work/bin"
+    echo "::group::signtool binaries"
+    for f in "$bin_abs"/*; do
+        case "$f" in
+            *.exe | *.dll) sign_file "$signtool_bin" "$pfx_file" "$f" ;;
+        esac
+    done
+    echo "::endgroup::"
+fi
+
 args=(build)
 if [ -n "$WIX_ACCEPT_EULA" ]; then
     args+=(-acceptEula "$WIX_ACCEPT_EULA")
@@ -82,6 +142,12 @@ echo "::endgroup::"
 if [ ! -f "$asset" ]; then
     echo "::error::wix did not write '$asset'"
     exit 1
+fi
+
+if [ -n "$signtool_bin" ]; then
+    echo "::group::signtool msi"
+    sign_file "$signtool_bin" "$pfx_file" "$asset"
+    echo "::endgroup::"
 fi
 
 base="$(basename "$asset")"
