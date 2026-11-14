@@ -17,6 +17,8 @@ set -euo pipefail
 : "${ARCH:?ARCH is required}"
 : "${APPRUN:=}"
 : "${METAINFO:=}"
+: "${GPG_KEY:=}"
+: "${GPG_PASSPHRASE:=}"
 : "${OUT_DIR:=dist}"
 : "${GITHUB_OUTPUT:=/dev/null}"
 
@@ -116,7 +118,23 @@ else
     (cd "$out" && shasum -a 256 "$base" >"$base.sha256")
 fi
 
+signature=""
+if [ -n "$GPG_KEY" ]; then
+    gnupg_home="$work/gnupg"
+    mkdir -m 700 "$gnupg_home"
+    export GNUPGHOME="$gnupg_home"
+    printf '%s\n' "$GPG_KEY" | gpg --batch --import
+    if [ -n "$GPG_PASSPHRASE" ]; then
+        printf '%s\n' "$GPG_PASSPHRASE" | gpg --batch --yes --armor --detach-sign \
+            --pinentry-mode loopback --passphrase-fd 0 --output "$asset.asc" "$asset"
+    else
+        gpg --batch --yes --armor --detach-sign --output "$asset.asc" "$asset"
+    fi
+    signature="$asset.asc"
+fi
+
 {
     echo "asset=$asset"
     echo "checksum=$asset.sha256"
+    echo "signature=$signature"
 } >>"$GITHUB_OUTPUT"

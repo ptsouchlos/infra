@@ -80,6 +80,7 @@ def main():
     commit = env.get("COMMIT") or env.get("GITHUB_SHA", "")
     out_dir = Path(env.get("OUT_DIR") or "dist")
     signed = env.get("SIGNED", "false") == "true"
+    signed_oses = {s.strip() for s in env.get("SIGNED_OSES", "").split(",") if s.strip()}
     created = env.get("CREATED") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     if not assets_dir.is_dir():
         fail(f"assets-dir '{assets_dir}' does not exist")
@@ -88,8 +89,9 @@ def main():
 
     prefix = f"{name}-{version}-"
     manifest_name = f"{prefix}manifest.json"
+    sidecars = (".sha256", ".asc", ".sig")
     files = sorted(p for p in assets_dir.rglob("*")
-                   if p.is_file() and not p.name.endswith(".sha256") and p.name != manifest_name)
+                   if p.is_file() and not p.name.endswith(sidecars) and p.name != manifest_name)
     if not files:
         fail(f"no assets found under '{assets_dir}'")
 
@@ -107,8 +109,14 @@ def main():
         actual = sha256_of(path)
         if not recorded or recorded[0].lower() != actual:
             fail(f"'{path.name}' does not match its .sha256 file")
+        asset_signed = (
+            signed
+            or fields["os"] in signed_oses
+            or path.with_name(path.name + ".asc").is_file()
+            or path.with_name(path.name + ".sig").is_file()
+        )
         assets.append({"file": path.name, **fields, "size": path.stat().st_size,
-                       "sha256": actual, "signed": signed})
+                       "sha256": actual, "signed": asset_signed})
 
     assets.sort(key=lambda a: a["file"])
     manifest = {

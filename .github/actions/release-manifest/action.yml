@@ -14,8 +14,11 @@ inputs:
     description: Commit sha the release was built from.
     default: ${{ github.sha }}
   signed:
-    description: Record every asset as signed. Leave false until signing is set up.
+    description: Record every asset as signed.
     default: "false"
+  signed-oses:
+    description: Comma-separated OS names (linux, macos, windows) whose assets are recorded as signed. Assets with a sibling .asc or .sig file are also marked signed automatically.
+    default: ""
   out-dir:
     description: Directory the manifest is written to, as <name>-<version>-manifest.json.
     default: dist
@@ -35,5 +38,6 @@ runs:
         VERSION: ${{ inputs.version }}
         COMMIT: ${{ inputs.commit }}
         SIGNED: ${{ inputs.signed }}
+        SIGNED_OSES: ${{ inputs.signed-oses }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: python3 "${{ github.action_path }}/manifest.py"

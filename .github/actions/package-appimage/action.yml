@@ -34,6 +34,12 @@ inputs:
   appimagetool-sha256:
     description: sha256 of that release's AppImage for the runner's architecture. Only needed for a version other than the built-in default.
     default: ""
+  gpg-key:
+    description: Optional ASCII-armored GPG private key to write a detached .asc signature beside the AppImage.
+    default: ""
+  gpg-passphrase:
+    description: Passphrase for gpg-key, if it is encrypted.
+    default: ""
   release:
     description: Upload the image and checksum to the GitHub release for the current tag.
     default: "false"
@@ -44,6 +50,9 @@ outputs:
   checksum:
     description: Path of the AppImage's .sha256 file.
     value: ${{ steps.pkg.outputs.checksum }}
+  signature:
+    description: Path of the .asc signature file, when gpg-key is set.
+    value: ${{ steps.pkg.outputs.signature }}
 runs:
   using: composite
   steps:
@@ -65,6 +74,8 @@ runs:
         NAME: ${{ inputs.name }}
         APPRUN: ${{ inputs.apprun }}
         METAINFO: ${{ inputs.metainfo }}
+        GPG_KEY: ${{ inputs.gpg-key }}
+        GPG_PASSPHRASE: ${{ inputs.gpg-passphrase }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: bash "${{ github.action_path }}/package.sh"
     - name: Upload to the release
@@ -74,4 +85,5 @@ runs:
         files: |
           ${{ steps.pkg.outputs.asset }}
           ${{ steps.pkg.outputs.checksum }}
+          ${{ steps.pkg.outputs.signature }}
         prerelease: ${{ contains(github.ref_name, '-') }}

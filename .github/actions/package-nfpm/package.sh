@@ -14,6 +14,8 @@ set -euo pipefail
 : "${ARCH:?ARCH is required}"
 : "${NAME:?NAME is required}"
 : "${FORMATS:=deb rpm}"
+: "${GPG_KEY:=}"
+: "${GPG_PASSPHRASE:=}"
 : "${OUT_DIR:=dist}"
 : "${GITHUB_OUTPUT:=/dev/null}"
 
@@ -59,6 +61,15 @@ export PKG_BIN_DIR="$bin_dir" PKG_VERSION="$VERSION" PKG_ARCH="$pkg_arch"
 
 assets=()
 checksums=()
+signatures=()
+gnupg_home=""
+trap '[ -n "$gnupg_home" ] && rm -rf "$gnupg_home"' EXIT
+if [ -n "$GPG_KEY" ]; then
+    gnupg_home="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/nfpm-gpg.XXXXXX")"
+    chmod 700 "$gnupg_home"
+    export GNUPGHOME="$gnupg_home"
+    printf '%s\n' "$GPG_KEY" | gpg --batch --import
+fi
 echo "::group::package"
 for f in "${formats[@]}"; do
     asset="$out/$NAME.$f"
@@ -72,6 +83,15 @@ for f in "${formats[@]}"; do
     else
         (cd "$out" && shasum -a 256 "$NAME.$f" >"$NAME.$f.sha256")
     fi
+    if [ -n "$GPG_KEY" ]; then
+        if [ -n "$GPG_PASSPHRASE" ]; then
+            printf '%s\n' "$GPG_PASSPHRASE" | gpg --batch --yes --armor --detach-sign \
+                --pinentry-mode loopback --passphrase-fd 0 --output "$asset.asc" "$asset"
+        else
+            gpg --batch --yes --armor --detach-sign --output "$asset.asc" "$asset"
+        fi
+        signatures+=("$asset.asc")
+    fi
     assets+=("$asset")
     checksums+=("$asset.sha256")
 done
@@ -84,4 +104,11 @@ echo "::endgroup::"
     echo "checksums<<EOF"
     printf '%s\n' "${checksums[@]}"
     echo "EOF"
+    if [ "${#signatures[@]}" -gt 0 ]; then
+        echo "signatures<<EOF"
+        printf '%s\n' "${signatures[@]}"
+        echo "EOF"
+    else
+        echo "signatures="
+    fi
 } >>"$GITHUB_OUTPUT"

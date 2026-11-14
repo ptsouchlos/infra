@@ -29,8 +29,23 @@ inputs:
     description: Asset base name; the image is written as <name>.dmg.
     required: true
   sign-identity:
-    description: codesign identity. "-" signs ad hoc, which Apple Silicon needs for a bundle to launch but which Gatekeeper still warns about. A Developer ID identity also turns on the hardened runtime and a secure timestamp; its certificate must already be in a keychain the job can use. Notarization is not done yet.
+    description: codesign identity. "-" signs ad hoc, which Apple Silicon needs for a bundle to launch but which Gatekeeper still warns about. A Developer ID identity also turns on the hardened runtime and a secure timestamp; its certificate must already be in a keychain the job can use.
     default: "-"
+  notarize:
+    description: Submit the signed .app to Apple notarization (xcrun notarytool) and staple it before building the .dmg. Requires a Developer ID sign-identity and either notary-profile or notary-key-id/notary-issuer-id/notary-key.
+    default: "false"
+  notary-profile:
+    description: Keychain profile name for xcrun notarytool submit --keychain-profile.
+    default: ""
+  notary-key-id:
+    description: App Store Connect API Key ID for xcrun notarytool.
+    default: ""
+  notary-issuer-id:
+    description: App Store Connect API Issuer ID for xcrun notarytool.
+    default: ""
+  notary-key:
+    description: App Store Connect API private key (.p8 contents or file path) for xcrun notarytool.
+    default: ""
   out-dir:
     description: Directory the dmg and checksum are written to.
     default: dist
@@ -61,6 +76,11 @@ runs:
         ICON: ${{ inputs.icon }}
         NAME: ${{ inputs.name }}
         SIGN_IDENTITY: ${{ inputs.sign-identity }}
+        NOTARIZE: ${{ inputs.notarize }}
+        NOTARY_PROFILE: ${{ inputs.notary-profile }}
+        NOTARY_KEY_ID: ${{ inputs.notary-key-id }}
+        NOTARY_ISSUER_ID: ${{ inputs.notary-issuer-id }}
+        NOTARY_KEY: ${{ inputs.notary-key }}
         OUT_DIR: ${{ inputs.out-dir }}
       run: bash "${{ github.action_path }}/package.sh"
     - name: Upload to the release

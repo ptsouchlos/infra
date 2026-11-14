@@ -1124,6 +1124,35 @@ class PackageNfpmScript(unittest.TestCase):
         self.assertIn("::error::", r.stdout + r.stderr)
         self.assertEqual(calls, [])
 
+    def test_gpg_key_writes_detached_asc_signatures(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            (fake / "nfpm").write_text("#!/usr/bin/env bash\necho pkg > \"$7\"\n")
+            (fake / "nfpm").chmod(0o755)
+            gpg = fake / "gpg"
+            gpg.write_text(
+                f'#!/usr/bin/env bash\necho "$*" >> "{d}/gpg"\n'
+                'while [ $# -gt 0 ]; do [ "$1" = --output ] && echo sig > "$2"; shift; done\n')
+            gpg.chmod(0o755)
+            (d / "nfpm.yaml").write_text("name: tool\n")
+            bins = d / "bins"
+            bins.mkdir()
+            (bins / "tool").write_text("bin")
+            gh_output = d / "out"
+            gh_output.touch()
+            r = run_script(self.script, {
+                "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                "CONFIG": str(d / "nfpm.yaml"), "BIN_DIR": str(bins), "VERSION": "1.2.3",
+                "ARCH": "x86_64", "NAME": "tool-1.2.3-linux-x86_64", "FORMATS": "deb",
+                "OUT_DIR": str(d / "dist"), "GPG_KEY": "FAKE-GPG-KEY",
+                "GITHUB_OUTPUT": str(gh_output),
+            })
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue((d / "dist" / "tool-1.2.3-linux-x86_64.deb.asc").is_file())
+            self.assertIn("tool-1.2.3-linux-x86_64.deb.asc", gh_output.read_text())
+
 
 PNG_64 = (  # a valid 64x64 PNG header is all package.sh reads
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x40\x00\x00\x00\x40\x08\x02\x00\x00\x00")
@@ -1278,6 +1307,37 @@ class PackageAppimageScript(unittest.TestCase):
         r = self.run_package(ARCH="riscv64")
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self.args, "")
+
+    def test_gpg_key_writes_detached_asc_signature(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            (fake / "appimagetool").write_text("#!/usr/bin/env bash\necho app > \"$3\"\n")
+            (fake / "appimagetool").chmod(0o755)
+            gpg = fake / "gpg"
+            gpg.write_text(
+                '#!/usr/bin/env bash\n'
+                'while [ $# -gt 0 ]; do [ "$1" = --output ] && echo sig > "$2"; shift; done\n')
+            gpg.chmod(0o755)
+            (d / "demo.desktop").write_text("[Desktop Entry]\nName=Tool\nIcon=tool\n")
+            (d / "icon.png").write_bytes(PNG_64)
+            bins = d / "bins"
+            bins.mkdir()
+            (bins / "tool").write_text("#!/bin/sh\n")
+            gh_output = d / "out"
+            gh_output.touch()
+            r = run_script(self.script, {
+                "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                "BIN_DIR": str(bins), "EXE": "tool",
+                "DESKTOP_FILE": str(d / "demo.desktop"), "ICON": str(d / "icon.png"),
+                "ARCH": "x86_64", "NAME": "tool-1.2.3-linux-x86_64",
+                "OUT_DIR": str(d / "dist"), "GPG_KEY": "FAKE-GPG-KEY",
+                "GITHUB_OUTPUT": str(gh_output),
+            })
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue((d / "dist" / "tool-1.2.3-linux-x86_64.AppImage.asc").is_file())
+            self.assertIn("signature=", gh_output.read_text())
 
 
 @unittest.skipIf(sys.platform == "win32", "uses a POSIX shell")
@@ -1500,6 +1560,9 @@ class PackageMacosScript(unittest.TestCase):
                  f'echo "$*" >> "{d}/lipo"\n'
                  'while [ $# -gt 0 ]; do [ "$1" = -output ] && out="$2"; shift; done\n'
                  'echo universal > "$out"\n')
+            tool("ditto", f'echo "$*" >> "{d}/ditto"\n'
+                          'args=("$@"); echo zip > "${args[$((${#args[@]}-1))]}"\n')
+            tool("xcrun", f'echo "$*" >> "{d}/xcrun"\n')
             tool("hdiutil",
                  f'echo "$*" > "{d}/hdiutil"\n'
                  'args=("$@"); n=${#args[@]}\n'
@@ -1538,6 +1601,7 @@ class PackageMacosScript(unittest.TestCase):
                         self.files[rel] = p.read_text(errors="replace")
             self.codesign = read("codesign")
             self.lipo = read("lipo")
+            self.xcrun = read("xcrun")
             self.sips = read("sips")
             self.iconset = read("iconset")
             self.hdiutil = " ".join(read("hdiutil"))
@@ -1643,6 +1707,29 @@ class PackageMacosScript(unittest.TestCase):
             r = self.run_package(MERGE_BIN_DIR=other)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("toolctl", r.stdout + r.stderr)
+
+    def test_notarize_requires_developer_id_identity(self):
+        r = self.run_package(NOTARIZE="true", NOTARY_PROFILE="my-profile")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("Developer ID", r.stdout + r.stderr)
+
+    def test_notarize_with_profile_submits_staples_and_signs_dmg(self):
+        r = self.run_package(SIGN_IDENTITY="Developer ID Application: Example",
+                             NOTARIZE="true", NOTARY_PROFILE="my-profile")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(any("notarytool submit" in line and "--keychain-profile my-profile" in line
+                            for line in self.xcrun))
+        self.assertTrue(any("stapler staple" in line for line in self.xcrun))
+        self.assertTrue(self.codesign[-1].endswith(".dmg"))
+
+    def test_notarize_with_api_key_submits_and_staples(self):
+        r = self.run_package(SIGN_IDENTITY="Developer ID Application: Example",
+                             NOTARIZE="true", NOTARY_KEY_ID="KEY123",
+                             NOTARY_ISSUER_ID="ISSUER456", NOTARY_KEY="PRIVATE KEY DATA")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(any("notarytool submit" in line and "--key-id KEY123" in line
+                            and "--issuer ISSUER456" in line for line in self.xcrun))
+        self.assertTrue(any("stapler staple" in line for line in self.xcrun))
 
 
 class PackageWindowsInstallScript(unittest.TestCase):
@@ -1754,6 +1841,36 @@ class PackageWindowsScript(unittest.TestCase):
         r = self.run_package(BIN_DIR="/nonexistent/bins")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("bin-dir", r.stdout + r.stderr)
+
+    def test_sign_cert_signs_exe_and_msi(self):
+        import base64
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            (fake / "wix").write_text(
+                f'#!/usr/bin/env bash\necho "$*" > "{d}/wix"\n'
+                'while [ $# -gt 0 ]; do [ "$1" = -o ] && echo msi > "$2"; shift; done\n')
+            (fake / "wix").chmod(0o755)
+            (fake / "signtool").write_text(f'#!/usr/bin/env bash\necho "$*" >> "{d}/signtool"\n')
+            (fake / "signtool").chmod(0o755)
+            bins = d / "bins"
+            bins.mkdir()
+            (bins / "tool.exe").write_text("mz")
+            (d / "tool.wxs").write_text("<Wix/>")
+            cert_b64 = base64.b64encode(b"FAKE-PFX").decode("ascii")
+            r = run_script(self.script, {
+                "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                "BIN_DIR": str(bins), "WXS": str(d / "tool.wxs"),
+                "NAME": "tool-1.2.3-windows-x86_64", "VERSION": "1.2.3",
+                "OUT_DIR": str(d / "dist"), "SIGN_CERT": cert_b64, "SIGN_PASSWORD": "secret",
+            })
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            calls = (d / "signtool").read_text().splitlines()
+            self.assertEqual(len(calls), 2)
+            self.assertIn("tool.exe", calls[0])
+            self.assertIn("tool-1.2.3-windows-x86_64.msi", calls[1])
+            self.assertIn("/p secret", calls[0])
 
 
 class ReleaseManifestScript(unittest.TestCase):
@@ -1893,6 +2010,18 @@ class ReleaseManifestScript(unittest.TestCase):
         files = {**self.FILES, "m/tool-1.2.3-manifest.json": b"{}"}
         r = self.run_manifest(files)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_signature_sidecars_and_signed_oses_mark_matching_assets_signed(self):
+        files = {
+            **self.FILES,
+            "linux-deb/tool-1.2.3-linux-x86_64.deb.asc": b"-----BEGIN PGP SIGNATURE-----",
+        }
+        r = self.run_manifest(files, SIGNED_OSES="macos")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        by_file = {a["file"]: a for a in self.manifest["assets"]}
+        self.assertTrue(by_file["tool-1.2.3-linux-x86_64.deb"]["signed"])
+        self.assertTrue(by_file["tool-1.2.3-macos-aarch64.dmg"]["signed"])
+        self.assertFalse(by_file["tool-1.2.3-windows-x86_64.msi"]["signed"])
         self.assertEqual(len(self.manifest["assets"]), len(self.FILES))
 
 
