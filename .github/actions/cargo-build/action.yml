@@ -10,6 +10,9 @@ inputs:
   test:
     description: Run `just test` after the build.
     default: "true"
+  nextest:
+    description: Run tests with cargo-nextest instead of `just test` (installs cargo-nextest when test and nextest are both true).
+    default: "false"
   bin:
     description: Build only this binary (sets CARGO_BIN for the recipes).
     default: ""
@@ -19,12 +22,18 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install cargo-nextest
+      if: inputs.test == 'true' && inputs.nextest == 'true'
+      uses: taiki-e/install-action@v2
+      with:
+        tool: nextest
     - name: Build
       shell: bash
       env:
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
         BUILD_TYPE: ${{ inputs.build-type }}
         RUN_TESTS: ${{ inputs.test }}
+        NEXTEST: ${{ inputs.nextest }}
         BIN: ${{ inputs.bin }}
         ARGS: ${{ inputs.args }}
       run: bash "${{ github.action_path }}/run.sh"
