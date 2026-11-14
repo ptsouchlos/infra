@@ -44,6 +44,10 @@ on:
         description: Run `just test` after each build.
         type: boolean
         default: true
+      nextest:
+        description: Run tests with cargo-nextest instead of `just test`.
+        type: boolean
+        default: false
       lfs:
         description: Fetch Git LFS files when checking out.
         type: boolean
@@ -86,5 +90,6 @@ jobs:
           build-type: ${{ matrix.build-type }}
           working-directory: ${{ inputs.working-directory }}
           test: ${{ inputs.test }}
+          nextest: ${{ inputs.nextest }}
           bin: ${{ inputs.bin }}
           args: ${{ inputs.args }}

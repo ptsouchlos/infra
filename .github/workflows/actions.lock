@@ -17,6 +17,7 @@ workflows:
         - 'ilammy/msvc-dev-cmd@v1.13.0'
         - 'softprops/action-gh-release@v3.0.4'
         - 'swatinem/rust-cache@v2.9.3'
+        - 'taiki-e/install-action@v2'
     '.github/workflows/cpp-build.yml':
         - 'actions/checkout@v7.0.1'
         - 'ptsouchlos/infra@v1'
@@ -190,3 +191,8 @@ dependencies:
         commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
         owner_id: 580492
         repo_id: 298565987
+    'taiki-e/install-action@v2':
+        ref: 'v2'
+        commit: 'sha1-4a76afe23f9e08d2d9550fb56e556444e8611d21'
+        owner_id: 43724913
+        repo_id: 442947557

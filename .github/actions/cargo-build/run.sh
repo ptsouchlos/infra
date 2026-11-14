@@ -7,8 +7,17 @@ set -euo pipefail
 : "${WORKING_DIRECTORY:=.}"
 : "${BUILD_TYPE:=debug}"
 : "${RUN_TESTS:=true}"
+: "${NEXTEST:=false}"
 : "${BIN:=}"
 : "${ARGS:=}"
+
+case "$NEXTEST" in
+    true | false) ;;
+    *)
+        echo "::error::nextest must be true or false, got '$NEXTEST'" >&2
+        exit 1
+        ;;
+esac
 
 case "$BUILD_TYPE" in
     debug) build_recipe=build; test_flags=() ;;
@@ -25,7 +34,11 @@ if ! command -v just >/dev/null; then
     echo "::error::just is not installed; run setup-rust with just: true first" >&2
     exit 1
 fi
-for recipe in "$build_recipe" test; do
+required_recipes=("$build_recipe")
+if [ "$RUN_TESTS" = true ] && [ "$NEXTEST" = false ]; then
+    required_recipes+=(test)
+fi
+for recipe in "${required_recipes[@]}"; do
     if ! just --show "$recipe" >/dev/null 2>&1; then
         echo "::error::no '$recipe' recipe in the justfile; import infra/rust/just/cargo.just" >&2
         exit 1
@@ -48,6 +61,10 @@ echo "::endgroup::"
 
 if [ "$RUN_TESTS" = true ]; then
     echo "::group::test ($BUILD_TYPE)"
-    just test ${test_flags[@]+"${test_flags[@]}"} ${args[@]+"${args[@]}"}
+    if [ "$NEXTEST" = true ]; then
+        cargo nextest run ${test_flags[@]+"${test_flags[@]}"} ${args[@]+"${args[@]}"}
+    else
+        just test ${test_flags[@]+"${test_flags[@]}"} ${args[@]+"${args[@]}"}
+    fi
     echo "::endgroup::"
 fi

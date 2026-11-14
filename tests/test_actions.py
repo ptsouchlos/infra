@@ -671,6 +671,38 @@ class CargoBuildScript(unittest.TestCase):
         self.assertIn("cargo.just", result.stderr)
         self.assertEqual(calls, [])
 
+    def test_nextest_runs_cargo_nextest_instead_of_just_test(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            calls = d / "calls"
+            just = d / "just"
+            just.write_text(
+                "#!/usr/bin/env bash\n"
+                '[ "$1" = "--show" ] && exit 0\n'
+                f'echo "just $*" >> "{calls}"\n'
+            )
+            just.chmod(0o755)
+            cargo = d / "cargo"
+            cargo.write_text(f'#!/usr/bin/env bash\necho "cargo $*" >> "{calls}"\n')
+            cargo.chmod(0o755)
+            r = run_script(self.script, {
+                "PATH": f"{d}{os.pathsep}{os.environ['PATH']}",
+                "BUILD_TYPE": "release",
+                "NEXTEST": "true",
+                "ARGS": "--workspace",
+            })
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(
+                calls.read_text().splitlines(),
+                ["just build-release --workspace", "cargo nextest run --release --workspace"],
+            )
+
+    def test_invalid_nextest_value_fails(self):
+        result, calls = self.run_build(NEXTEST="yes")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("nextest must be true or false", result.stderr)
+        self.assertEqual(calls, [])
+
 
 @unittest.skipUnless(shutil.which("cargo") and shutil.which("just"), "cargo and just are required")
 class CargoBuildRealScript(unittest.TestCase):
