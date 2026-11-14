@@ -1,0 +1,99 @@
+name: C++ build
+
+# Reusable workflow: sets up a C++ toolchain and builds/tests a CMake project
+# across a matrix of {os, compiler} legs. Each leg may optionally set `version`,
+# `build-type`, `preset`, `cmake-version` or `configure-args` to override the
+# workflow-level defaults.
+#
+#   uses: ptsouchlos/infra/.github/workflows/cpp-build.yml@v1
+#   with:
+#     targets: '[{"os":"ubuntu-latest","compiler":"gcc","version":"14"},{"os":"macos-latest","compiler":"appleclang"},{"os":"windows-latest","compiler":"msvc"}]'
+#     ccache: true
+on:
+  workflow_call:
+    inputs:
+      targets:
+        description: JSON array of {os, compiler} objects (optional version, build-type, preset, cmake-version, configure-args).
+        type: string
+        default: '[{"os":"ubuntu-latest","compiler":"gcc"},{"os":"ubuntu-latest","compiler":"clang"},{"os":"macos-latest","compiler":"appleclang"},{"os":"windows-latest","compiler":"msvc"}]'
+      cmake-version:
+        description: Exact CMake version to install with pip. Empty keeps the runner's CMake.
+        type: string
+        default: ""
+      vcpkg:
+        description: Export VCPKG_ROOT, cloning and bootstrapping vcpkg unless already set.
+        type: boolean
+        default: false
+      source-dir:
+        description: Directory containing the top-level CMakeLists.txt.
+        type: string
+        default: "."
+      build-dir:
+        description: Build directory (ignored when a preset sets its own binaryDir).
+        type: string
+        default: build
+      build-type:
+        description: Default CMAKE_BUILD_TYPE.
+        type: string
+        default: Release
+      preset:
+        description: Default configure preset name.
+        type: string
+        default: ""
+      configure-args:
+        description: Default extra configure arguments (space-separated).
+        type: string
+        default: ""
+      test:
+        description: Run ctest after building.
+        type: boolean
+        default: true
+      install-prefix:
+        description: If set, run cmake --install into this prefix. Use forward slashes on Windows.
+        type: string
+        default: ""
+      ccache:
+        description: Cache compilations with ccache.
+        type: boolean
+        default: false
+      cpm-cache:
+        description: Cache CPM downloads in .cpm-cache.
+        type: boolean
+        default: false
+      lfs:
+        description: Fetch Git LFS files when checking out.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.os }}, ${{ matrix.compiler }}${{ matrix.version && format('-{0}', matrix.version) || '' }}, ${{ matrix.preset || inputs.preset || matrix.build-type || inputs.build-type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.targets) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: ${{ inputs.lfs }}
+      - uses: ptsouchlos/infra/.github/actions/setup-cpp@v1
+        with:
+          compiler: ${{ matrix.compiler }}
+          version: ${{ matrix.version || '' }}
+          cmake-version: ${{ matrix.cmake-version || inputs.cmake-version }}
+          vcpkg: ${{ inputs.vcpkg }}
+      - uses: ptsouchlos/infra/.github/actions/cmake-build@v1
+        with:
+          source-dir: ${{ inputs.source-dir }}
+          build-dir: ${{ inputs.build-dir }}
+          build-type: ${{ matrix.build-type || inputs.build-type }}
+          preset: ${{ matrix.preset || inputs.preset }}
+          configure-args: ${{ matrix.configure-args || inputs.configure-args }}
+          test: ${{ inputs.test }}
+          install-prefix: ${{ inputs.install-prefix }}
+          ccache: ${{ inputs.ccache }}
+          cpm-cache: ${{ inputs.cpm-cache }}

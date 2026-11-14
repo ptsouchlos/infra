@@ -17,6 +17,9 @@ workflows:
         - 'ilammy/msvc-dev-cmd@v1.13.0'
         - 'softprops/action-gh-release@v3.0.4'
         - 'swatinem/rust-cache@v2.9.3'
+    '.github/workflows/cpp-build.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'ptsouchlos/infra@v1'
     '.github/workflows/release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'
@@ -51,6 +54,11 @@ dependencies:
         commit: 'sha1-ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc'
         owner_id: 44036562
         repo_id: 760701061
+    'actions/cache@v6':
+        ref: 'v6'
+        commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        owner_id: 44036562
+        repo_id: 215566462
     'actions/cache@v6.1.0':
         ref: 'v6.1.0'
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
@@ -122,11 +130,21 @@ dependencies:
         repo_id: 258510356
         uses:
             - 'extractions/setup-crate@0551596312d4008a6dfbc4d3c38fa20eaef46d2d'
+    'hendrikmuhs/ccache-action@v1.2':
+        ref: 'v1.2'
+        commit: 'sha1-5ebbd400eff9e74630f759d94ddd7b6c26299639'
+        owner_id: 7126422
+        repo_id: 319035161
     'hendrikmuhs/ccache-action@v1.2.20':
         ref: 'v1.2.20'
         commit: 'sha1-5ebbd400eff9e74630f759d94ddd7b6c26299639'
         owner_id: 7126422
         repo_id: 319035161
+    'ilammy/msvc-dev-cmd@v1':
+        ref: 'v1'
+        commit: 'sha1-0b201ec74fa43914dc39ae48a89fd1d8cb592756'
+        owner_id: 1256587
+        repo_id: 212181767
     'ilammy/msvc-dev-cmd@v1.13.0':
         ref: 'v1.13.0'
         commit: 'sha1-0b201ec74fa43914dc39ae48a89fd1d8cb592756'
@@ -148,9 +166,12 @@ dependencies:
         owner_id: 6591180
         repo_id: 1270714317
         uses:
+            - 'actions/cache@v6'
             - 'bnjbvr/cargo-machete@v0.9.2'
             - 'embarkstudios/cargo-deny-action@v2'
             - 'extractions/setup-just@v4'
+            - 'hendrikmuhs/ccache-action@v1.2'
+            - 'ilammy/msvc-dev-cmd@v1'
             - 'peter-evans/create-pull-request@v8'
             - 'ptsouchlos/embd@v0'
             - 'swatinem/rust-cache@v2'
