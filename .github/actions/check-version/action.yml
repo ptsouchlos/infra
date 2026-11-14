@@ -1,0 +1,34 @@
+name: Check crate version against tag
+description: Verify that all workspace crates in Cargo.toml agree on one version, and that an optional release tag matches v<version>.
+inputs:
+  manifest-path:
+    description: Path to Cargo.toml.
+    default: Cargo.toml
+  packages:
+    description: Optional space-separated list of package names to check; defaults to all workspace packages.
+    default: ""
+  tag:
+    description: Tag to verify against v<version> (for example v1.2.3). Defaults to github.ref_name when running on a v* tag, or empty otherwise.
+    default: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+  require-tag:
+    description: Fail if tag is empty.
+    default: "false"
+outputs:
+  version:
+    description: Resolved crate version (without leading v).
+    value: ${{ steps.check.outputs.version }}
+  tag:
+    description: Resolved tag (empty if none).
+    value: ${{ steps.check.outputs.tag }}
+runs:
+  using: composite
+  steps:
+    - name: Check version
+      id: check
+      shell: bash
+      env:
+        MANIFEST_PATH: ${{ inputs.manifest-path }}
+        PACKAGES: ${{ inputs.packages }}
+        TAG: ${{ inputs.tag }}
+        REQUIRE_TAG: ${{ inputs.require-tag }}
+      run: bash "${{ github.action_path }}/check.sh"

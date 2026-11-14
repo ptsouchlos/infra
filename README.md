@@ -173,6 +173,7 @@ See [tests/README.md](tests/README.md).
 | `cargo-build` | `build-type`, `working-directory`, `test`, `bin`, `args` | `just build` (debug) or `just build-release`, then `just test` (with `--release` for release); needs `rust/just/cargo.just` imported and `just` installed |
 | `cargo-deps` | `deny`, `deny-checks`, `deny-args`, `machete`, `machete-args`, `working-directory` | cargo-deny (`licenses bans sources` by default) and cargo-machete (unused dependencies); Linux runners only; your repo supplies `deny.toml` |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
+| `check-version` | `manifest-path`, `packages`, `tag`, `require-tag` | verifies workspace crates in `Cargo.toml` agree on one version, checks an optional tag matches `v<version>`, and outputs `version` and `tag` |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
 | `update-infra` | `tag`, `token`, `branch` | moves the repo's infra embeds (and `@vN` action refs on a major) to a release, then opens or updates a PR |
 

@@ -44,9 +44,9 @@ class ActionStructure(unittest.TestCase):
         self.assertEqual(
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
-             "cargo-deps", "build-docs", "update-infra", "cargo-release", "package-nfpm",
-             "package-appimage", "package-flatpak", "package-macos", "package-windows",
-             "release-manifest", "publish-release"},
+             "cargo-deps", "build-docs", "update-infra", "check-version", "cargo-release",
+             "package-nfpm", "package-appimage", "package-flatpak", "package-macos",
+             "package-windows", "release-manifest", "publish-release"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -2198,6 +2198,71 @@ class PublishReleaseAction(unittest.TestCase):
         self.assertRegex(self.text, r"(?ms)^  attest:\n.*?default: \"false\"")
         self.assertIn("if: inputs.attest == 'true'", self.text)
         self.assertIn("actions/attest-build-provenance@v", self.text)
+
+
+@unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
+class CheckVersionScript(unittest.TestCase):
+    script = ACTIONS / "check-version" / "check.sh"
+
+    def run_check(self, packages, **env):
+        import json as _json
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            fake = d / "fakebin"
+            fake.mkdir()
+            payload = _json.dumps({"packages": packages})
+            (fake / "cargo").write_text(
+                f"#!/usr/bin/env bash\ncat <<'JSON'\n{payload}\nJSON\n"
+            )
+            (fake / "cargo").chmod(0o755)
+            manifest = d / "Cargo.toml"
+            manifest.write_text("[package]\nname = 'app'\n")
+            gh_output = d / "out"
+            gh_output.touch()
+            full_env = {
+                "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}",
+                "MANIFEST_PATH": str(manifest),
+                "GITHUB_OUTPUT": str(gh_output),
+                **env,
+            }
+            r = run_script(self.script, full_env)
+            self.gh_output = gh_output.read_text(encoding="utf-8")
+            return r
+
+    def test_matching_tag_outputs_version_and_tag(self):
+        r = self.run_check(
+            [{"name": "app", "version": "1.2.3"}, {"name": "cli", "version": "1.2.3"}],
+            TAG="v1.2.3",
+        )
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("version=1.2.3\n", self.gh_output)
+        self.assertIn("tag=v1.2.3\n", self.gh_output)
+
+    def test_empty_tag_allowed_by_default_and_fails_when_required(self):
+        r = self.run_check([{"name": "app", "version": "1.2.3"}], TAG="")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("version=1.2.3\n", self.gh_output)
+
+        r = self.run_check(
+            [{"name": "app", "version": "1.2.3"}], TAG="", REQUIRE_TAG="true"
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("tag is required", r.stdout + r.stderr)
+
+    def test_mismatched_tag_fails(self):
+        r = self.run_check([{"name": "app", "version": "1.2.3"}], TAG="v1.2.4")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("does not match", r.stdout + r.stderr)
+
+    def test_disagreeing_versions_fail_unless_filtered_by_packages(self):
+        pkgs = [{"name": "app", "version": "1.2.3"}, {"name": "tool", "version": "0.1.0"}]
+        r = self.run_check(pkgs, TAG="v1.2.3")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("disagree", r.stdout + r.stderr)
+
+        r = self.run_check(pkgs, PACKAGES="app", TAG="v1.2.3")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("version=1.2.3\n", self.gh_output)
 
 
 if __name__ == "__main__":
