@@ -268,7 +268,9 @@ class GenerateTests(unittest.TestCase):
             p = fake / tool
             p.write_text(f"#!/usr/bin/env python3\nimport pathlib, sys\nwith open({str(log)!r}, 'a') as f:\n    f.write({tool!r} + ' ' + ' '.join(sys.argv[1:]) + '\\n')\n", encoding="utf-8")
             p.chmod(0o755)
-        env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+        rt = self.out / "rt"
+        rt.mkdir()
+        env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}", "XDG_RUNTIME_DIR": str(rt)}
 
         subprocess.run(["just", "format"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
         subprocess.run(["just", "format-check"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
@@ -285,6 +287,60 @@ class GenerateTests(unittest.TestCase):
         self.assertIn("clang-format -i", recorded)
         self.assertIn("clang-format --dry-run --Werror", recorded)
         self.assertIn("clang-tidy -p build", recorded)
+
+    def test_cpp_and_rust_coverage_just_recipes(self) -> None:
+        if not shutil.which("just") or sys.platform == "win32":
+            self.skipTest("just unix shell required")
+        self.out.mkdir(parents=True, exist_ok=True)
+        (self.out / "justfile").write_text(
+            "set shell := ['bash', '-c']\n"
+            f"import '{generate.INFRA_DIR.as_posix()}/cpp/just/coverage.just'\n",
+            encoding="utf-8",
+        )
+        listing = subprocess.run(["just", "--list"], cwd=self.out, capture_output=True, text=True, check=True)
+        self.assertIn("coverage", listing.stdout)
+
+        fake = self.out / "fakebin"
+        fake.mkdir()
+        log = self.out / "cov.log"
+        for tool in ("gcovr", "llvm-profdata", "llvm-cov", "cargo"):
+            p = fake / tool
+            p.write_text(f"#!/usr/bin/env python3\nimport sys\nwith open({str(log)!r}, 'a') as f:\n    f.write({tool!r} + ' ' + ' '.join(sys.argv[1:]) + '\\n')\n", encoding="utf-8")
+            p.chmod(0o755)
+        rt = self.out / "rt"
+        rt.mkdir()
+        env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}", "XDG_RUNTIME_DIR": str(rt)}
+
+        missing = subprocess.run(["just", "coverage"], cwd=self.out, env=env, capture_output=True, text=True)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("build directory 'build' not found", missing.stderr)
+
+        build = self.out / "build"
+        build.mkdir()
+        (build / "main.gcno").write_text("", encoding="utf-8")
+        subprocess.run(["just", "coverage"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
+
+        (build / "main.gcno").unlink()
+        (build / "default.profraw").write_text("", encoding="utf-8")
+        app = build / "app"
+        app.write_text("#!/bin/sh\n", encoding="utf-8")
+        app.chmod(0o755)
+        subprocess.run(["just", "coverage"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
+
+        (self.out / "justfile").write_text(
+            "set shell := ['bash', '-c']\n"
+            f"import '{generate.INFRA_DIR.as_posix()}/rust/just/coverage.just'\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["just", "coverage"], cwd=self.out, env={**env, "COV_FORMAT": "lcov"}, check=True, capture_output=True, text=True)
+        subprocess.run(["just", "coverage-clean"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
+
+        recorded = log.read_text(encoding="utf-8")
+        self.assertIn("gcovr -r . build", recorded)
+        self.assertIn("llvm-profdata merge -sparse", recorded)
+        self.assertIn("llvm-cov report -object", recorded)
+        self.assertIn("cargo llvm-cov --lcov --output-path lcov.info", recorded)
+        self.assertIn("cargo llvm-cov clean --workspace", recorded)
 
     def test_every_toolchain_file_exists(self) -> None:
         toolchains = generate.INFRA_DIR / "cpp" / "cmake" / "toolchains"

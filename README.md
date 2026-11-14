@@ -5,7 +5,7 @@ This repo is a set of re-usable components for projects of different languages. 
 
 ## C++ / CMake
 
-`cpp/cmake/` holds independent, includable CMake modules; `cpp/just/` holds `cmake.just` (build recipes), `format.just` (`format`, `format-check` via `clang-format`), and `tidy.just` (`lint` via `clang-tidy`) — the `just` recipes in this repo need `just` 1.27.0 or newer, for the `[doc]` attribute.
+`cpp/cmake/` holds independent, includable CMake modules; `cpp/just/` holds `cmake.just` (build recipes), `format.just` (`format`, `format-check` via `clang-format`), `tidy.just` (`lint` via `clang-tidy`), and `coverage.just` (`coverage` via `gcovr` or `llvm-cov`) — the `just` recipes in this repo need `just` 1.27.0 or newer, for the `[doc]` attribute.
 Vendor the repo with embd, then in your project:
 
 ```cmake
@@ -33,6 +33,7 @@ must run before the targets it should affect are created, as must `pt_enable_ipo
 | --- | --- |
 | `compiler_warnings` | `pt_set_project_warnings(iface_target warnings_as_errors msvc clang gcc cuda)` |
 | `sanitizers` | `pt_enable_sanitizers(iface_target address leak ubsan thread memory)` |
+| `coverage` | `pt_enable_coverage(iface_target)` (`--coverage` on GNU, `-fprofile-instr-generate -fcoverage-mapping` on Clang) |
 | `hardening` | `pt_enable_hardening(iface_target global ubsan_minimal_runtime)` |
 | `static_analyzers` | `pt_enable_clang_tidy`, `pt_enable_cppcheck`, `pt_enable_include_what_you_use` |
 | `cache`, `linker`, `ipo` | `pt_enable_cache()`, `pt_configure_linker(target)`, `pt_enable_ipo()` |
@@ -130,6 +131,7 @@ import 'infra/rust/just/clippy.just'
 | `cargo.just` | `build`, `build-release`, `run`, `run-release`, `test`, `check`, `clean`, `list-bins`, `list-targets` |
 | `format.just` | `format`, `format-check` |
 | `clippy.just` | `lint` |
+| `coverage.just` | `coverage`, `coverage-clean` (need `cargo install cargo-llvm-cov`) |
 | `deps.just` | `deny`, `machete` (need `cargo install cargo-deny cargo-machete`) |
 
 `build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Set `CARGO_BIN` to
