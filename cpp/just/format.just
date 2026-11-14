@@ -1,13 +1,26 @@
 clang_format := env('CLANG_FORMAT', 'clang-format')
-format_dirs := env('FORMAT_DIRS', '')
-_format_py := if os_family() == 'windows' { 'python' } else { 'python3' }
+format_dirs := env('FORMAT_DIRS', '.')
 
+[unix]
 [doc('Format all C/C++ code')]
 [group('dev')]
 format *args:
-    {{_format_py}} -c "import pathlib, shlex, subprocess, sys; exts = {'.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx'}; skip = {'.git', 'infra', 'vcpkg_installed', 'node_modules'}; roots = [p for p in sys.argv[2].split() if p] or ['.']; files = sorted(str(p) for r in roots for p in (pathlib.Path(r).rglob('*') if pathlib.Path(r).is_dir() else [pathlib.Path(r)]) if p.is_file() and p.suffix.lower() in exts and not any(part in skip or part.startswith('build') for part in p.parts)); sys.exit(0 if not files else subprocess.call([sys.argv[1], '-i', *shlex.split(sys.argv[3]), *files]))" "{{clang_format}}" "{{format_dirs}}" "{{args}}"
+    find {{format_dirs}} \( -name '.git' -o -name 'infra' -o -name 'vcpkg_installed' -o -name 'node_modules' -o -name 'build*' \) -prune -o -type f \( -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.cxx' -o -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.hxx' \) -exec {{clang_format}} -i {{args}} {} +
 
+[windows]
+[doc('Format all C/C++ code')]
+[group('dev')]
+format *args:
+    $roots = '{{format_dirs}}' -split '\s+' | Where-Object { $_ }; $files = Get-ChildItem -Path $roots -Recurse -File -Include *.c,*.cc,*.cpp,*.cxx,*.h,*.hh,*.hpp,*.hxx | Where-Object { $_.FullName -notmatch '[\\/](\.git|infra|vcpkg_installed|node_modules|build[^\\/]*)[\\/]' } | ForEach-Object { $_.FullName }; if ($files) { & '{{clang_format}}' -i {{args}} @files; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+
+[unix]
 [doc('Check C/C++ formatting without modifying files')]
 [group('dev')]
 format-check *args:
-    {{_format_py}} -c "import pathlib, shlex, subprocess, sys; exts = {'.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx'}; skip = {'.git', 'infra', 'vcpkg_installed', 'node_modules'}; roots = [p for p in sys.argv[2].split() if p] or ['.']; files = sorted(str(p) for r in roots for p in (pathlib.Path(r).rglob('*') if pathlib.Path(r).is_dir() else [pathlib.Path(r)]) if p.is_file() and p.suffix.lower() in exts and not any(part in skip or part.startswith('build') for part in p.parts)); sys.exit(0 if not files else subprocess.call([sys.argv[1], '--dry-run', '--Werror', *shlex.split(sys.argv[3]), *files]))" "{{clang_format}}" "{{format_dirs}}" "{{args}}"
+    find {{format_dirs}} \( -name '.git' -o -name 'infra' -o -name 'vcpkg_installed' -o -name 'node_modules' -o -name 'build*' \) -prune -o -type f \( -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.cxx' -o -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.hxx' \) -exec {{clang_format}} --dry-run --Werror {{args}} {} +
+
+[windows]
+[doc('Check C/C++ formatting without modifying files')]
+[group('dev')]
+format-check *args:
+    $roots = '{{format_dirs}}' -split '\s+' | Where-Object { $_ }; $files = Get-ChildItem -Path $roots -Recurse -File -Include *.c,*.cc,*.cpp,*.cxx,*.h,*.hh,*.hpp,*.hxx | Where-Object { $_.FullName -notmatch '[\\/](\.git|infra|vcpkg_installed|node_modules|build[^\\/]*)[\\/]' } | ForEach-Object { $_.FullName }; if ($files) { & '{{clang_format}}' --dry-run --Werror {{args}} @files; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
