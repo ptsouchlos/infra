@@ -3,7 +3,10 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -243,7 +246,45 @@ class GenerateTests(unittest.TestCase):
         project = generate.generate("cpp-just", self.out)
         justfile = (self.out / "justfile").read_text(encoding="utf-8")
         self.assertIn("import '%s/cpp/just/cmake.just'" % generate.INFRA_DIR.as_posix(), justfile)
+        self.assertIn("import '%s/cpp/just/format.just'" % generate.INFRA_DIR.as_posix(), justfile)
+        self.assertIn("import '%s/cpp/just/tidy.just'" % generate.INFRA_DIR.as_posix(), justfile)
         self.assertEqual([list(s.cmd) for s in project.steps()], [["just", "configure"], ["just", "build"], ["just", "test"]])
+
+    def test_cpp_just_format_and_tidy_recipes(self) -> None:
+        if not shutil.which("just"):
+            self.skipTest("just not installed")
+        generate.generate("cpp-just", self.out)
+        listing = subprocess.run(["just", "--list"], cwd=self.out, capture_output=True, text=True, check=True)
+        self.assertIn("format", listing.stdout)
+        self.assertIn("format-check", listing.stdout)
+        self.assertIn("lint", listing.stdout)
+        if sys.platform == "win32":
+            return
+
+        fake = self.out / "fakebin"
+        fake.mkdir()
+        log = self.out / "calls.log"
+        for tool in ("clang-format", "clang-tidy"):
+            p = fake / tool
+            p.write_text(f"#!/usr/bin/env python3\nimport pathlib, sys\nwith open({str(log)!r}, 'a') as f:\n    f.write({tool!r} + ' ' + ' '.join(sys.argv[1:]) + '\\n')\n", encoding="utf-8")
+            p.chmod(0o755)
+        env = {**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"}
+
+        subprocess.run(["just", "format"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
+        subprocess.run(["just", "format-check"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
+
+        missing_cc = subprocess.run(["just", "lint"], cwd=self.out, env=env, capture_output=True, text=True)
+        self.assertNotEqual(missing_cc.returncode, 0)
+        self.assertIn("compile_commands.json not found", missing_cc.stderr + missing_cc.stdout)
+
+        (self.out / "build").mkdir()
+        (self.out / "build" / "compile_commands.json").write_text("[]", encoding="utf-8")
+        subprocess.run(["just", "lint"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
+
+        recorded = log.read_text(encoding="utf-8")
+        self.assertIn("clang-format -i", recorded)
+        self.assertIn("clang-format --dry-run --Werror", recorded)
+        self.assertIn("clang-tidy -p build", recorded)
 
     def test_every_toolchain_file_exists(self) -> None:
         toolchains = generate.INFRA_DIR / "cpp" / "cmake" / "toolchains"
