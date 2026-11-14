@@ -264,6 +264,27 @@ jobs:
 Add repo-specific steps, such as installing system libraries, by using `setup-rust` and
 `cargo-build` in your own matrix instead.
 
+For CMake projects, call the reusable `cpp-build.yml` workflow with a JSON array of
+`{os, compiler}` legs (each leg may also set `version`, `build-type`, `preset`, `cmake-version`
+or `configure-args`):
+
+```yaml
+jobs:
+  cpp:
+    uses: ptsouchlos/infra/.github/workflows/cpp-build.yml@v1
+    with:
+      targets: '[{"os":"ubuntu-latest","compiler":"gcc","version":"14"},{"os":"macos-latest","compiler":"appleclang"},{"os":"windows-latest","compiler":"msvc"}]'
+      ccache: true
+```
+
+| Input | Default | Does |
+| --- | --- | --- |
+| `targets` | 4 legs (`gcc`, `clang`, `appleclang`, `msvc`) | JSON array of `{os, compiler}` matrix legs |
+| `cmake-version`, `vcpkg` | none, `false` | passed to `setup-cpp` |
+| `source-dir`, `build-dir`, `build-type`, `preset`, `configure-args` | `.`, `build`, `Release`, none, none | passed to `cmake-build` (per-leg values win when set) |
+| `test`, `install-prefix`, `ccache`, `cpm-cache` | `true`, none, `false`, `false` | passed to `cmake-build` |
+| `lfs` | `false` | fetch Git LFS files when checking out |
+
 To run `cargo-deny advisories` on a schedule without failing pull requests on upstream advisory
 updates, call the reusable `rust-advisories.yml` workflow:
 
