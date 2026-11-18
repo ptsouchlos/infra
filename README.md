@@ -307,6 +307,31 @@ jobs:
 | `deny-args` | `--all-features` | arguments passed to `cargo-deny` before `check` |
 | `lfs` | `false` | fetch Git LFS files when checking out |
 
+To build, package, manifest and publish a Rust release across platforms, call the reusable `rust-release.yml` workflow:
+
+```yaml
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write
+  id-token: write       # needed only when attest: true
+  attestations: write   # needed only when attest: true
+
+jobs:
+  release:
+    uses: ptsouchlos/infra/.github/workflows/rust-release.yml@v1
+    secrets: inherit
+    with:
+      name: my-app
+      bin: my-app
+      nfpm-config: packaging/linux/nfpm.yaml
+      attest: true
+```
+
+It runs `check-version`, builds each entry in `targets` with `cargo-release`, optionally runs `package-nfpm`, `package-appimage`, `package-flatpak`, `package-macos` and `package-windows` (each enabled when its config input such as `nfpm-config`, `appimage-exe`, `flatpak-manifest`, `macos-bundle-id` or `windows-wxs` is non-empty), generates `release-manifest` (`signed-oses`), and publishes via `publish-release` on `refs/tags/v*` when `publish: true`. Signing secrets (`gpg-key`, `gpg-passphrase`, `macos-cert`, `macos-cert-password`, `macos-sign-identity`, `macos-notary-*`, `windows-sign-*`) are optional.
+
 Notes:
 - `toolchain` takes a channel (`stable`, `beta`, `nightly`) or a version (`1.85`). The cargo cache is keyed per rustc version, so toolchain legs never share a cache. Nightly sometimes ships without `rustfmt` or `clippy`, so mark a nightly leg `continue-on-error: true`.
 - `cargo-release` builds for the runner's own architecture only; cross-linking (for example x86_64 to aarch64) is not supported, so run each target on a matching runner.

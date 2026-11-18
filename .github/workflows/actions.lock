@@ -30,6 +30,11 @@ workflows:
     '.github/workflows/rust-build.yml':
         - 'actions/checkout@v7.0.1'
         - 'ptsouchlos/infra@v1'
+    '.github/workflows/rust-release.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'actions/download-artifact@v8.0.2'
+        - 'actions/upload-artifact@v7.0.2'
+        - 'ptsouchlos/infra@v1'
     '.github/workflows/update-infra.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'
@@ -55,11 +60,6 @@ dependencies:
         commit: 'sha1-ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc'
         owner_id: 44036562
         repo_id: 760701061
-    'actions/cache@v6':
-        ref: 'v6'
-        commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
-        owner_id: 44036562
-        repo_id: 215566462
     'actions/cache@v6.1.0':
         ref: 'v6.1.0'
         commit: 'sha1-55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
@@ -80,6 +80,11 @@ dependencies:
         commit: 'sha1-368f82528645a54fb793d4d04e342629a3f51346'
         owner_id: 44036562
         repo_id: 438112499
+    'actions/download-artifact@v8.0.2':
+        ref: 'v8.0.2'
+        commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
+        owner_id: 44036562
+        repo_id: 192626254
     'actions/setup-python@v7.1.0':
         ref: 'v7.1.0'
         commit: 'sha1-6d4fd22b20465ccc0f7354476588e8df7c9ca0e0'
@@ -88,6 +93,11 @@ dependencies:
     'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f':
         ref: 'v7.0.0'
         commit: 'sha1-bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
+        owner_id: 44036562
+        repo_id: 192625955
+    'actions/upload-artifact@v7.0.2':
+        ref: 'v7.0.2'
+        commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         owner_id: 44036562
         repo_id: 192625955
     'actions/upload-pages-artifact@v5.0.0':
@@ -102,11 +112,6 @@ dependencies:
         commit: 'sha1-ac30a525c0a8d163a92d727b3ff079ee3f6ecb08'
         owner_id: 1180019
         repo_id: 420777439
-    'embarkstudios/cargo-deny-action@v2':
-        ref: 'v2'
-        commit: 'sha1-3c6349835b2b7b196a839186cb8b78e02f7b5f25'
-        owner_id: 44887257
-        repo_id: 228054692
     'embarkstudios/cargo-deny-action@v2.1.1':
         ref: 'v2.1.1'
         commit: 'sha1-3c6349835b2b7b196a839186cb8b78e02f7b5f25'
@@ -117,13 +122,6 @@ dependencies:
         commit: 'sha1-0551596312d4008a6dfbc4d3c38fa20eaef46d2d'
         owner_id: 64203070
         repo_id: 341105718
-    'extractions/setup-just@v4':
-        ref: 'v4'
-        commit: 'sha1-53165ef7e734c5c07cb06b3c8e7b647c5aa16db3'
-        owner_id: 64203070
-        repo_id: 258510356
-        uses:
-            - 'extractions/setup-crate@0551596312d4008a6dfbc4d3c38fa20eaef46d2d'
     'extractions/setup-just@v4.0.0':
         ref: 'v4.0.0'
         commit: 'sha1-53165ef7e734c5c07cb06b3c8e7b647c5aa16db3'
@@ -131,21 +129,11 @@ dependencies:
         repo_id: 258510356
         uses:
             - 'extractions/setup-crate@0551596312d4008a6dfbc4d3c38fa20eaef46d2d'
-    'hendrikmuhs/ccache-action@v1.2':
-        ref: 'v1.2'
-        commit: 'sha1-5ebbd400eff9e74630f759d94ddd7b6c26299639'
-        owner_id: 7126422
-        repo_id: 319035161
     'hendrikmuhs/ccache-action@v1.2.20':
         ref: 'v1.2.20'
         commit: 'sha1-5ebbd400eff9e74630f759d94ddd7b6c26299639'
         owner_id: 7126422
         repo_id: 319035161
-    'ilammy/msvc-dev-cmd@v1':
-        ref: 'v1'
-        commit: 'sha1-0b201ec74fa43914dc39ae48a89fd1d8cb592756'
-        owner_id: 1256587
-        repo_id: 212181767
     'ilammy/msvc-dev-cmd@v1.13.0':
         ref: 'v1.13.0'
         commit: 'sha1-0b201ec74fa43914dc39ae48a89fd1d8cb592756'
@@ -158,34 +146,32 @@ dependencies:
         repo_id: 197176365
     'ptsouchlos/embd@v0':
         ref: 'v0'
-        commit: 'sha1-6c6ff82031a4afcb271c7108cb3761d7b0982778'
+        commit: 'sha1-5c5c93db6608cf3b9a71e21df9a766f0348edc15'
         owner_id: 6591180
         repo_id: 1154141989
     'ptsouchlos/infra@v1':
         ref: 'v1'
-        commit: 'sha1-5d7323ded6e542c428b3a575085f99150df41bb8'
+        commit: 'sha1-82cb1faaf54d4b06d2db40cb8d643bc36785eaa8'
         owner_id: 6591180
         repo_id: 1270714317
         uses:
-            - 'actions/cache@v6'
+            - 'actions/attest-build-provenance@v2.4.0'
+            - 'actions/cache@v6.1.0'
             - 'bnjbvr/cargo-machete@v0.9.2'
-            - 'embarkstudios/cargo-deny-action@v2'
-            - 'extractions/setup-just@v4'
-            - 'hendrikmuhs/ccache-action@v1.2'
-            - 'ilammy/msvc-dev-cmd@v1'
+            - 'embarkstudios/cargo-deny-action@v2.1.1'
+            - 'extractions/setup-just@v4.0.0'
+            - 'hendrikmuhs/ccache-action@v1.2.20'
+            - 'ilammy/msvc-dev-cmd@v1.13.0'
             - 'peter-evans/create-pull-request@v8'
             - 'ptsouchlos/embd@v0'
-            - 'swatinem/rust-cache@v2'
+            - 'softprops/action-gh-release@v3.0.4'
+            - 'swatinem/rust-cache@v2.9.3'
+            - 'taiki-e/install-action@v2'
     'softprops/action-gh-release@v3.0.4':
         ref: 'v3.0.4'
         commit: 'sha1-8a0cd651e5b2365bd640854a3fa5dfc70e4875f3'
         owner_id: 2242
         repo_id: 204253808
-    'swatinem/rust-cache@v2':
-        ref: 'v2'
-        commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
-        owner_id: 580492
-        repo_id: 298565987
     'swatinem/rust-cache@v2.9.3':
         ref: 'v2.9.3'
         commit: 'sha1-d1527c8f67ef9af357290475d4af4b0fab8f12e0'
@@ -193,6 +179,6 @@ dependencies:
         repo_id: 298565987
     'taiki-e/install-action@v2':
         ref: 'v2'
-        commit: 'sha1-4a76afe23f9e08d2d9550fb56e556444e8611d21'
+        commit: 'sha1-ab49d3c64680143e184118bed66a46419fc15519'
         owner_id: 43724913
         repo_id: 442947557
