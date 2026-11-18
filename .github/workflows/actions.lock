@@ -13,7 +13,7 @@ workflows:
         - 'bnjbvr/cargo-machete@v0.9.2'
         - 'embarkstudios/cargo-deny-action@v2.1.1'
         - 'extractions/setup-just@v4.0.0'
-        - 'hendrikmuhs/ccache-action@v1.2.20'
+        - 'hendrikmuhs/ccache-action@v1.2.25'
         - 'ilammy/msvc-dev-cmd@v1.13.0'
         - 'softprops/action-gh-release@v3.0.4'
         - 'swatinem/rust-cache@v2.9.3'
@@ -132,6 +132,11 @@ dependencies:
     'hendrikmuhs/ccache-action@v1.2.20':
         ref: 'v1.2.20'
         commit: 'sha1-5ebbd400eff9e74630f759d94ddd7b6c26299639'
+        owner_id: 7126422
+        repo_id: 319035161
+    'hendrikmuhs/ccache-action@v1.2.25':
+        ref: 'v1.2.25'
+        commit: 'sha1-dbeefd73e8e2ffc1bbc412570072735eb4db3607'
         owner_id: 7126422
         repo_id: 319035161
     'ilammy/msvc-dev-cmd@v1.13.0':
