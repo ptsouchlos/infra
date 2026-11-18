@@ -36,7 +36,7 @@ runs:
   steps:
     - name: Attest build provenance
       if: inputs.attest == 'true'
-      uses: actions/attest-build-provenance@v2.4.0
+      uses: actions/attest@v4.2.1
       with:
         subject-path: ${{ inputs.assets-dir }}/**/*
     - name: Publish the release

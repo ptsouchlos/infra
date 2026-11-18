@@ -2229,7 +2229,7 @@ class PublishReleaseAction(unittest.TestCase):
     def test_attest_input_defaults_off_and_guards_attestation_step(self):
         self.assertRegex(self.text, r"(?ms)^  attest:\n.*?default: \"false\"")
         self.assertIn("if: inputs.attest == 'true'", self.text)
-        self.assertIn("actions/attest-build-provenance@v", self.text)
+        self.assertIn("actions/attest@v", self.text)
 
 
 @unittest.skipIf(sys.platform == "win32", "uses a fake cargo on PATH")
