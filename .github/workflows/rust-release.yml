@@ -1,0 +1,484 @@
+name: Rust release
+
+# Reusable workflow: validates crate versions against a v* tag, builds release
+# binaries across a target matrix with cargo-release, optionally packages
+# installers (nFPM, AppImage, Flatpak, macOS .dmg, Windows .msi) with optional
+# signing/notarization, generates the release manifest, and publishes the GitHub
+# release on tag pushes.
+#
+# Callers using `attest: true` must grant `id-token: write` and
+# `attestations: write` in their workflow permissions alongside `contents: write`.
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: Product / asset base name (for example hourloom).
+        type: string
+        required: true
+      targets:
+        description: JSON array of {os, target, platform, arch} objects to build with cargo-release.
+        type: string
+        default: '[{"os":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu","platform":"linux","arch":"x86_64"},{"os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu","platform":"linux","arch":"aarch64"},{"os":"macos-latest","target":"aarch64-apple-darwin","platform":"macos","arch":"aarch64"},{"os":"windows-latest","target":"x86_64-pc-windows-msvc","platform":"windows","arch":"x86_64"}]'
+      bin:
+        description: Single binary name without .exe (ignored when bins is set).
+        type: string
+        default: ""
+      bins:
+        description: Whitespace-separated binary names without .exe.
+        type: string
+        default: ""
+      archive:
+        description: "cargo-release archive mode: auto, tar.gz, zip or none."
+        type: string
+        default: auto
+      working-directory:
+        description: Directory containing Cargo.toml for cargo-release.
+        type: string
+        default: "."
+      manifest-path:
+        description: Path to Cargo.toml for check-version.
+        type: string
+        default: Cargo.toml
+      packages:
+        description: Optional space-separated package names for check-version.
+        type: string
+        default: ""
+      cargo-args:
+        description: Extra cargo build arguments passed to cargo-release.
+        type: string
+        default: ""
+      linux-deps:
+        description: Space-separated apt packages to install on Linux build runners.
+        type: string
+        default: ""
+      lfs:
+        description: Fetch Git LFS files on checkout.
+        type: boolean
+        default: false
+      linux-packaging-matrix:
+        description: JSON array of {os, arch} objects for Linux packagers.
+        type: string
+        default: '[{"os":"ubuntu-latest","arch":"x86_64"},{"os":"ubuntu-24.04-arm","arch":"aarch64"}]'
+      nfpm-config:
+        description: Path to nfpm.yaml (enables package-nfpm when non-empty).
+        type: string
+        default: ""
+      nfpm-formats:
+        description: Space-separated nFPM formats.
+        type: string
+        default: "deb rpm"
+      appimage-exe:
+        description: Main executable name for AppImage (enables package-appimage when non-empty).
+        type: string
+        default: ""
+      appimage-desktop-file:
+        description: Path to .desktop file for AppImage.
+        type: string
+        default: ""
+      appimage-icon:
+        description: Path to PNG icon for AppImage.
+        type: string
+        default: ""
+      appimage-metainfo:
+        description: Path to AppStream metainfo XML for AppImage.
+        type: string
+        default: ""
+      flatpak-manifest:
+        description: Path to Flatpak manifest (enables package-flatpak when non-empty).
+        type: string
+        default: ""
+      flatpak-app-id:
+        description: Flatpak application ID.
+        type: string
+        default: ""
+      macos-packaging-matrix:
+        description: JSON array of {os, arch} objects for package-macos.
+        type: string
+        default: '[{"os":"macos-latest","arch":"aarch64"}]'
+      macos-bundle-id:
+        description: macOS CFBundleIdentifier (enables package-macos when non-empty).
+        type: string
+        default: ""
+      macos-display-name:
+        description: macOS .app display name.
+        type: string
+        default: ""
+      macos-exe:
+        description: Main macOS executable in bin-dir.
+        type: string
+        default: ""
+      macos-icon:
+        description: Optional path to .icns icon for macOS bundle.
+        type: string
+        default: ""
+      macos-notarize:
+        description: Enable xcrun notarytool notarization/stapling in package-macos.
+        type: string
+        default: "false"
+      windows-packaging-matrix:
+        description: JSON array of {os, arch} objects for package-windows.
+        type: string
+        default: '[{"os":"windows-latest","arch":"x86_64"}]'
+      windows-wxs:
+        description: Path to WiX .wxs file (enables package-windows when non-empty).
+        type: string
+        default: ""
+      windows-accept-eula:
+        description: WiX EULA version passed to package-windows.
+        type: string
+        default: wix7
+      signed-oses:
+        description: Comma-separated OS names to mark signed in release-manifest.
+        type: string
+        default: ""
+      publish:
+        description: Publish the GitHub release on refs/tags/v* pushes.
+        type: boolean
+        default: true
+      attest:
+        description: Generate SLSA build provenance attestations in publish-release.
+        type: boolean
+        default: false
+      draft:
+        description: Leave the GitHub release as a draft.
+        type: boolean
+        default: false
+      prerelease:
+        description: "Prerelease mode for publish-release: auto, true or false."
+        type: string
+        default: auto
+    secrets:
+      gpg-key:
+        description: Armored GPG private key for package-nfpm and package-appimage.
+        required: false
+      gpg-passphrase:
+        description: Passphrase for gpg-key.
+        required: false
+      macos-cert:
+        description: Base64-encoded Developer ID .p12 certificate for package-macos.
+        required: false
+      macos-cert-password:
+        description: Password for macos-cert.
+        required: false
+      macos-sign-identity:
+        description: Signing identity for package-macos (defaults to '-' ad-hoc when unset).
+        required: false
+      macos-notary-key-id:
+        description: App Store Connect API Key ID for macOS notarization.
+        required: false
+      macos-notary-issuer-id:
+        description: App Store Connect API Issuer ID for macOS notarization.
+        required: false
+      macos-notary-key:
+        description: Base64-encoded App Store Connect .p8 private key for macOS notarization.
+        required: false
+      windows-sign-cert:
+        description: Base64-encoded Authenticode .pfx certificate for package-windows.
+        required: false
+      windows-sign-password:
+        description: Password for windows-sign-cert.
+        required: false
+      windows-sign-timestamp-url:
+        description: RFC 3161 timestamp server URL for package-windows.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ptsouchlos/infra/.github/actions/check-version@v1
+        id: check
+        with:
+          manifest-path: ${{ inputs.manifest-path }}
+          packages: ${{ inputs.packages }}
+
+  build:
+    name: Build (${{ matrix.platform }}-${{ matrix.arch }})
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.targets) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: ${{ inputs.lfs }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux' && inputs.linux-deps != ''
+        shell: bash
+        env:
+          LINUX_DEPS: ${{ inputs.linux-deps }}
+        run: |
+          read -r -a deps <<< "$LINUX_DEPS"
+          sudo apt-get update && sudo apt-get install -y "${deps[@]}"
+      - uses: ptsouchlos/infra/.github/actions/setup-rust@v1
+        with:
+          components: ""
+          targets: ${{ matrix.target }}
+      - uses: ptsouchlos/infra/.github/actions/cargo-release@v1
+        id: pkg
+        with:
+          target: ${{ matrix.target }}
+          bin: ${{ inputs.bin }}
+          bins: ${{ inputs.bins }}
+          name: ${{ inputs.name }}-${{ needs.version.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}
+          archive: ${{ inputs.archive }}
+          working-directory: ${{ inputs.working-directory }}
+          cargo-args: ${{ inputs.cargo-args }}
+      - name: Upload staged binaries
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: bins-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ steps.pkg.outputs.bin-dir }}/*
+          if-no-files-found: error
+      - name: Upload archive asset
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: asset-archive-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  package-nfpm:
+    name: Package nFPM (${{ matrix.arch }})
+    if: inputs.nfpm-config != ''
+    needs: [version, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.linux-packaging-matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Download staged binaries
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: bins-linux-${{ matrix.arch }}
+          path: bins
+      - name: Mark binaries executable
+        shell: bash
+        run: chmod +x bins/*
+      - uses: ptsouchlos/infra/.github/actions/package-nfpm@v1
+        with:
+          config: ${{ inputs.nfpm-config }}
+          bin-dir: bins
+          version: ${{ needs.version.outputs.version }}
+          arch: ${{ matrix.arch }}
+          name: ${{ inputs.name }}-${{ needs.version.outputs.version }}-linux-${{ matrix.arch }}
+          formats: ${{ inputs.nfpm-formats }}
+          gpg-key: ${{ secrets.gpg-key }}
+          gpg-passphrase: ${{ secrets.gpg-passphrase }}
+      - name: Upload nFPM assets
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: asset-nfpm-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  package-appimage:
+    name: Package AppImage (${{ matrix.arch }})
+    if: inputs.appimage-exe != ''
+    needs: [version, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.linux-packaging-matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Download staged binaries
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: bins-linux-${{ matrix.arch }}
+          path: bins
+      - name: Mark binaries executable
+        shell: bash
+        run: chmod +x bins/*
+      - uses: ptsouchlos/infra/.github/actions/package-appimage@v1
+        with:
+          bin-dir: bins
+          exe: ${{ inputs.appimage-exe }}
+          desktop-file: ${{ inputs.appimage-desktop-file }}
+          icon: ${{ inputs.appimage-icon }}
+          metainfo: ${{ inputs.appimage-metainfo }}
+          arch: ${{ matrix.arch }}
+          name: ${{ inputs.name }}-${{ needs.version.outputs.version }}-linux-${{ matrix.arch }}
+          gpg-key: ${{ secrets.gpg-key }}
+          gpg-passphrase: ${{ secrets.gpg-passphrase }}
+      - name: Upload AppImage assets
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: asset-appimage-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  package-flatpak:
+    name: Package Flatpak (${{ matrix.arch }})
+    if: inputs.flatpak-manifest != ''
+    needs: [version, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.linux-packaging-matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Download staged binaries
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: bins-linux-${{ matrix.arch }}
+          path: bins
+      - name: Mark binaries executable
+        shell: bash
+        run: chmod +x bins/*
+      - uses: ptsouchlos/infra/.github/actions/package-flatpak@v1
+        with:
+          manifest: ${{ inputs.flatpak-manifest }}
+          bin-dir: bins
+          app-id: ${{ inputs.flatpak-app-id }}
+          arch: ${{ matrix.arch }}
+          name: ${{ inputs.name }}-${{ needs.version.outputs.version }}-linux-${{ matrix.arch }}
+      - name: Upload Flatpak assets
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: asset-flatpak-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  package-macos:
+    name: Package macOS (${{ matrix.arch }})
+    if: inputs.macos-bundle-id != ''
+    needs: [version, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.macos-packaging-matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Download staged binaries
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: bins-macos-${{ matrix.arch }}
+          path: bins
+      - name: Mark binaries executable
+        shell: bash
+        run: chmod +x bins/*
+      - uses: ptsouchlos/infra/.github/actions/package-macos@v1
+        with:
+          bin-dir: bins
+          exe: ${{ inputs.macos-exe }}
+          bundle-id: ${{ inputs.macos-bundle-id }}
+          display-name: ${{ inputs.macos-display-name }}
+          version: ${{ needs.version.outputs.version }}
+          arch: ${{ matrix.arch }}
+          name: ${{ inputs.name }}-${{ needs.version.outputs.version }}-macos-${{ matrix.arch }}
+          icon: ${{ inputs.macos-icon }}
+          sign-identity: ${{ secrets.macos-sign-identity || '-' }}
+          certificate: ${{ secrets.macos-cert }}
+          certificate-password: ${{ secrets.macos-cert-password }}
+          notarize: ${{ inputs.macos-notarize }}
+          notary-key-id: ${{ secrets.macos-notary-key-id }}
+          notary-issuer-id: ${{ secrets.macos-notary-issuer-id }}
+          notary-key: ${{ secrets.macos-notary-key }}
+      - name: Upload macOS assets
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: asset-macos-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  package-windows:
+    name: Package Windows (${{ matrix.arch }})
+    if: inputs.windows-wxs != ''
+    needs: [version, build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.windows-packaging-matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Download staged binaries
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: bins-windows-${{ matrix.arch }}
+          path: bins
+      - uses: ptsouchlos/infra/.github/actions/package-windows@v1
+        with:
+          bin-dir: bins
+          wxs: ${{ inputs.windows-wxs }}
+          version: ${{ needs.version.outputs.version }}
+          name: ${{ inputs.name }}-${{ needs.version.outputs.version }}-windows-${{ matrix.arch }}
+          accept-eula: ${{ inputs.windows-accept-eula }}
+          sign-cert: ${{ secrets.windows-sign-cert }}
+          sign-password: ${{ secrets.windows-sign-password }}
+          sign-timestamp-url: ${{ secrets.windows-sign-timestamp-url || 'http://timestamp.digicert.com' }}
+      - name: Upload Windows assets
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: asset-windows-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Release manifest & publish
+    needs:
+      - version
+      - build
+      - package-nfpm
+      - package-appimage
+      - package-flatpak
+      - package-macos
+      - package-windows
+    if: >-
+      always()
+      && needs.version.result == 'success'
+      && needs.build.result == 'success'
+      && (needs.package-nfpm.result == 'success' || needs.package-nfpm.result == 'skipped')
+      && (needs.package-appimage.result == 'success' || needs.package-appimage.result == 'skipped')
+      && (needs.package-flatpak.result == 'success' || needs.package-flatpak.result == 'skipped')
+      && (needs.package-macos.result == 'success' || needs.package-macos.result == 'skipped')
+      && (needs.package-windows.result == 'success' || needs.package-windows.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Download release assets
+        uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: asset-*
+          path: assets
+      - uses: ptsouchlos/infra/.github/actions/release-manifest@v1
+        id: manifest
+        with:
+          assets-dir: assets
+          name: ${{ inputs.name }}
+          version: ${{ needs.version.outputs.version }}
+          signed-oses: ${{ inputs.signed-oses }}
+      - name: Upload release manifest
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-manifest
+          path: ${{ steps.manifest.outputs.manifest }}
+          if-no-files-found: error
+      - name: Publish GitHub release
+        if: inputs.publish && startsWith(github.ref, 'refs/tags/v')
+        uses: ptsouchlos/infra/.github/actions/publish-release@v1
+        with:
+          assets-dir: assets
+          manifest: ${{ steps.manifest.outputs.manifest }}
+          tag: ${{ github.ref_name }}
+          attest: ${{ inputs.attest }}
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
