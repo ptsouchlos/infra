@@ -4,7 +4,7 @@
 version: 'v0.0.3'
 workflows:
     '.github/workflows/ci.yml':
-        - 'actions/attest-build-provenance@v2.4.0'
+        - 'actions/attest-build-provenance@v4.2.2'
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
         - 'actions/deploy-pages@v5.0.1'
@@ -55,6 +55,18 @@ dependencies:
         uses:
             - 'actions/attest-build-provenance@1176ef556905f349f669722abf30bce1a6e16e01'
             - 'actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc'
+    'actions/attest-build-provenance@v4.2.2':
+        ref: 'v4.2.2'
+        commit: 'sha1-4d101475d8b20a2381f78447822ac1eab6504dd8'
+        owner_id: 44036562
+        repo_id: 760702757
+        uses:
+            - 'actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d'
+    'actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d':
+        ref: 'v4.2.1'
+        commit: 'sha1-508db95dd578ae2727ebd6217d5ba78e4fbda05d'
+        owner_id: 44036562
+        repo_id: 760701061
     'actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc':
         ref: 'v2.4.0'
         commit: 'sha1-ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc'
