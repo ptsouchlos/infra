@@ -44,9 +44,9 @@ class ActionStructure(unittest.TestCase):
         self.assertEqual(
             found,
             {"setup-cpp", "cmake-build", "setup-rust", "cargo-check", "cargo-build",
-             "cargo-deps", "build-docs", "update-infra", "check-version", "cargo-release",
-             "package-nfpm", "package-appimage", "package-flatpak", "package-macos",
-             "package-windows", "release-manifest", "publish-release"},
+             "cargo-deps", "cargo-crap", "build-docs", "update-infra", "check-version",
+             "cargo-release", "package-nfpm", "package-appimage", "package-flatpak",
+             "package-macos", "package-windows", "release-manifest", "publish-release"},
         )
 
     def test_every_action_is_composite_and_documented(self):
@@ -831,6 +831,67 @@ class RustAdvisoriesWorkflow(unittest.TestCase):
         self.assertIn("ptsouchlos/infra/.github/actions/cargo-deps@v1", self.text)
         self.assertIn("deny-checks: advisories", self.text)
         self.assertIn('machete: "false"', self.text)
+
+    def test_third_party_actions_are_version_pinned(self):
+        for ref in re.findall(r"(?m)^\s*-?\s*uses:\s*(\S+)", self.text):
+            with self.subTest(uses=ref):
+                self.assertRegex(ref, r"@v\d")
+
+
+class CargoCrapAction(unittest.TestCase):
+    path = ACTIONS / "cargo-crap" / "action.yml"
+
+    def setUp(self):
+        self.text = self.path.read_text(encoding="utf-8")
+
+    def test_wraps_minikin_cargo_crap_and_forwards_inputs(self):
+        self.assertRegex(self.text, r"uses:\s*minikin/cargo-crap@v\d")
+        for name in (
+            "working-directory", "args", "coverage-args", "lcov", "baseline",
+            "base", "fail-regression", "fail-above", "comment", "comment-marker",
+            "github-token",
+        ):
+            with self.subTest(input=name):
+                self.assertRegex(self.text, rf"(?m)^  {name}:")
+                self.assertIn(f"{name}: ${{{{ inputs.{name} }}}}", self.text)
+
+    def test_matches_upstream_gating_and_comment_defaults(self):
+        self.assertRegex(self.text, r'(?ms)^  fail-regression:.*?default: "true"\n')
+        self.assertRegex(self.text, r'(?ms)^  fail-above:.*?default: "false"\n')
+        self.assertRegex(self.text, r'(?ms)^  comment:.*?default: "true"\n')
+
+    def test_exposes_outputs(self):
+        for name in ("crappy", "regressed", "report"):
+            with self.subTest(output=name):
+                self.assertRegex(self.text, rf"(?m)^  {name}:")
+                self.assertIn(f"steps.crap.outputs.{name}", self.text)
+
+
+class RustCrapWorkflow(unittest.TestCase):
+    path = ROOT / ".github" / "workflows" / "rust-crap.yml"
+
+    def setUp(self):
+        self.text = self.path.read_text(encoding="utf-8")
+
+    def test_is_a_reusable_workflow_with_expected_inputs(self):
+        self.assertRegex(self.text, r"(?m)^  workflow_call:")
+        for name in (
+            "os", "toolchain", "working-directory", "args", "coverage-args",
+            "baseline", "fail-regression", "fail-above", "comment",
+            "comment-marker", "lfs",
+        ):
+            with self.subTest(input=name):
+                self.assertRegex(self.text, rf"(?m)^      {name}:")
+
+    def test_requests_pull_requests_write_on_the_job(self):
+        self.assertIn("pull-requests: write", self.text)
+
+    def test_runs_setup_rust_then_cargo_crap(self):
+        setup = self.text.index("actions/setup-rust@v")
+        crap = self.text.index("minikin/cargo-crap@v")
+        self.assertLess(setup, crap)
+        self.assertIn("components: llvm-tools-preview", self.text)
+        self.assertIn("lfs: ${{ inputs.lfs }}", self.text)
 
     def test_third_party_actions_are_version_pinned(self):
         for ref in re.findall(r"(?m)^\s*-?\s*uses:\s*(\S+)", self.text):
