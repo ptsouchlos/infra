@@ -333,6 +333,7 @@ class GenerateTests(unittest.TestCase):
             encoding="utf-8",
         )
         subprocess.run(["just", "coverage"], cwd=self.out, env={**env, "COV_FORMAT": "lcov"}, check=True, capture_output=True, text=True)
+        subprocess.run(["just", "crap", "--threshold", "25"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
         subprocess.run(["just", "coverage-clean"], cwd=self.out, env=env, check=True, capture_output=True, text=True)
 
         recorded = log.read_text(encoding="utf-8")
@@ -340,6 +341,7 @@ class GenerateTests(unittest.TestCase):
         self.assertIn("llvm-profdata merge -sparse", recorded)
         self.assertIn("llvm-cov report -object", recorded)
         self.assertIn("cargo llvm-cov --lcov --output-path lcov.info", recorded)
+        self.assertIn("cargo crap --lcov lcov.info --threshold 25", recorded)
         self.assertIn("cargo llvm-cov clean --workspace", recorded)
 
     def test_every_toolchain_file_exists(self) -> None:

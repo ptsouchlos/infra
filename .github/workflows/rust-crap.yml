@@ -1,0 +1,87 @@
+name: Rust CRAP
+
+# Reusable workflow: computes CRAP (Change Risk Anti-Patterns) scores for a Rust
+# crate with cargo-crap, compares pull requests against their base commit, posts
+# a PR comment, and writes the report to the job summary.
+#
+#   permissions:
+#     contents: read
+#     pull-requests: write
+#   jobs:
+#     crap:
+#       uses: ptsouchlos/infra/.github/workflows/rust-crap.yml@v1
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: Runner label.
+        type: string
+        default: ubuntu-latest
+      toolchain:
+        description: Rust toolchain (stable, beta, nightly or a version such as 1.88).
+        type: string
+        default: stable
+      working-directory:
+        description: Directory containing Cargo.toml.
+        type: string
+        default: "."
+      args:
+        description: Extra arguments for every cargo-crap run, as shell words.
+        type: string
+        default: ""
+      coverage-args:
+        description: Extra arguments for cargo llvm-cov, as shell words.
+        type: string
+        default: ""
+      baseline:
+        description: Baseline JSON file, relative to working-directory, used instead of the base-commit run.
+        type: string
+        default: ""
+      fail-regression:
+        description: Fail when a function's CRAP score rises relative to base or baseline.
+        type: boolean
+        default: true
+      fail-above:
+        description: Fail when any function scores above the threshold.
+        type: boolean
+        default: false
+      comment:
+        description: On a pull request, post or update the markdown report comment.
+        type: boolean
+        default: true
+      comment-marker:
+        description: Hidden marker line used to find and update the existing PR comment.
+        type: string
+        default: "<!-- cargo-crap-report -->"
+      lfs:
+        description: Fetch Git LFS files when checking out.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  crap:
+    runs-on: ${{ inputs.os }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: ${{ inputs.lfs }}
+      - uses: ptsouchlos/infra/.github/actions/setup-rust@v1
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          components: llvm-tools-preview
+      - uses: minikin/cargo-crap@v0.9.0
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          args: ${{ inputs.args }}
+          coverage-args: ${{ inputs.coverage-args }}
+          baseline: ${{ inputs.baseline }}
+          fail-regression: ${{ inputs.fail-regression }}
+          fail-above: ${{ inputs.fail-above }}
+          comment: ${{ inputs.comment }}
+          comment-marker: ${{ inputs.comment-marker }}

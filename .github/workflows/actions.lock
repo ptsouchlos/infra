@@ -15,6 +15,7 @@ workflows:
         - 'extractions/setup-just@v4.0.0'
         - 'hendrikmuhs/ccache-action@v1.2.25'
         - 'ilammy/msvc-dev-cmd@v1.13.0'
+        - 'minikin/cargo-crap@v0.9.0'
         - 'softprops/action-gh-release@v3.0.4'
         - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2'
@@ -30,6 +31,10 @@ workflows:
     '.github/workflows/rust-build.yml':
         - 'actions/checkout@v7.0.1'
         - 'ptsouchlos/infra@v1'
+    '.github/workflows/rust-crap.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'minikin/cargo-crap@v0.9.0'
+        - 'ptsouchlos/infra@v1'
     '.github/workflows/rust-release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
@@ -42,24 +47,6 @@ workflows:
     '.github/workflows/verify-lockfile.yml':
         - 'actions/checkout@v7.0.1'
 dependencies:
-    'actions/attest-build-provenance@1176ef556905f349f669722abf30bce1a6e16e01':
-        ref: 'predicate@1.1.5'
-        commit: 'sha1-1176ef556905f349f669722abf30bce1a6e16e01'
-        owner_id: 44036562
-        repo_id: 760702757
-    'actions/attest-build-provenance@v2.4.0':
-        ref: 'v2.4.0'
-        commit: 'sha1-e8998f949152b193b063cb0ec769d69d929409be'
-        owner_id: 44036562
-        repo_id: 760702757
-        uses:
-            - 'actions/attest-build-provenance@1176ef556905f349f669722abf30bce1a6e16e01'
-            - 'actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc'
-    'actions/attest@ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc':
-        ref: 'v2.4.0'
-        commit: 'sha1-ce27ba3b4a9a139d9a20a4a07d69fabb52f1e5bc'
-        owner_id: 44036562
-        repo_id: 760701061
     'actions/attest@v4.2.1':
         ref: 'v4.2.1'
         commit: 'sha1-508db95dd578ae2727ebd6217d5ba78e4fbda05d'
@@ -90,6 +77,11 @@ dependencies:
         commit: 'sha1-9000827ccba6bdab643e8b6fd33ac0654aef8333'
         owner_id: 44036562
         repo_id: 192626254
+    'actions/github-script@v8':
+        ref: 'v8'
+        commit: 'sha1-ed597411d8f924073f98dfc5c65a23a2325f34cd'
+        owner_id: 44036562
+        repo_id: 205262760
     'actions/setup-python@v7.1.0':
         ref: 'v7.1.0'
         commit: 'sha1-6d4fd22b20465ccc0f7354476588e8df7c9ca0e0'
@@ -134,11 +126,6 @@ dependencies:
         repo_id: 258510356
         uses:
             - 'extractions/setup-crate@0551596312d4008a6dfbc4d3c38fa20eaef46d2d'
-    'hendrikmuhs/ccache-action@v1.2.20':
-        ref: 'v1.2.20'
-        commit: 'sha1-5ebbd400eff9e74630f759d94ddd7b6c26299639'
-        owner_id: 7126422
-        repo_id: 319035161
     'hendrikmuhs/ccache-action@v1.2.25':
         ref: 'v1.2.25'
         commit: 'sha1-dbeefd73e8e2ffc1bbc412570072735eb4db3607'
@@ -149,6 +136,14 @@ dependencies:
         commit: 'sha1-0b201ec74fa43914dc39ae48a89fd1d8cb592756'
         owner_id: 1256587
         repo_id: 212181767
+    'minikin/cargo-crap@v0.9.0':
+        ref: 'v0.9.0'
+        commit: 'sha1-49f67037505997092f3df41d7a88e4fbfa09daee'
+        owner_id: 4456735
+        repo_id: 1216744997
+        uses:
+            - 'actions/github-script@v8'
+            - 'taiki-e/install-action@v2'
     'peter-evans/create-pull-request@v8':
         ref: 'v8'
         commit: 'sha1-3ffccacd46053766916f087ce41d627c0b8cf2d1'
@@ -161,16 +156,16 @@ dependencies:
         repo_id: 1154141989
     'ptsouchlos/infra@v1':
         ref: 'v1'
-        commit: 'sha1-82cb1faaf54d4b06d2db40cb8d643bc36785eaa8'
+        commit: 'sha1-3a9101079fe67a0bfe77c220f3ffbe20c55a7d96'
         owner_id: 6591180
         repo_id: 1270714317
         uses:
-            - 'actions/attest-build-provenance@v2.4.0'
+            - 'actions/attest@v4.2.1'
             - 'actions/cache@v6.1.0'
             - 'bnjbvr/cargo-machete@v0.9.2'
             - 'embarkstudios/cargo-deny-action@v2.1.1'
             - 'extractions/setup-just@v4.0.0'
-            - 'hendrikmuhs/ccache-action@v1.2.20'
+            - 'hendrikmuhs/ccache-action@v1.2.25'
             - 'ilammy/msvc-dev-cmd@v1.13.0'
             - 'peter-evans/create-pull-request@v8'
             - 'ptsouchlos/embd@v0'
@@ -189,6 +184,6 @@ dependencies:
         repo_id: 298565987
     'taiki-e/install-action@v2':
         ref: 'v2'
-        commit: 'sha1-ab49d3c64680143e184118bed66a46419fc15519'
+        commit: 'sha1-75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f'
         owner_id: 43724913
         repo_id: 442947557

@@ -131,7 +131,7 @@ import 'infra/rust/just/clippy.just'
 | `cargo.just` | `build`, `build-release`, `run`, `run-release`, `test`, `check`, `clean`, `list-bins`, `list-targets` |
 | `format.just` | `format`, `format-check` |
 | `clippy.just` | `lint` |
-| `coverage.just` | `coverage`, `coverage-clean` (need `cargo install cargo-llvm-cov`) |
+| `coverage.just` | `coverage`, `crap`, `coverage-clean` (need `cargo install cargo-llvm-cov` and, for `crap`, `cargo-crap`) |
 | `deps.just` | `deny`, `machete` (need `cargo install cargo-deny cargo-machete`) |
 
 `build` and `run` use the `dev` profile; set `CARGO_PROFILE` to pick another. Set `CARGO_BIN` to
@@ -174,6 +174,7 @@ See [tests/README.md](tests/README.md).
 | `publish-release` | `assets-dir`, `manifest`, `tag`, `title`, `notes`, `generate-notes`, `prerelease`, `draft`, `attest`, `token` | creates (or reuses) a draft GitHub release for `tag` (`prerelease: auto` marks tags containing `-`), uploads every file under `assets-dir` plus `manifest`, optionally attests build provenance (`attest: "true"`, needs `id-token: write` and `attestations: write`), and publishes the release only once all uploads succeed so a half-built release is never visible; needs `gh` and `contents: write` |
 | `cargo-build` | `build-type`, `working-directory`, `test`, `nextest`, `bin`, `args` | `just build` (debug) or `just build-release`, then `just test` (or `cargo nextest run` when `nextest: "true"`); needs `rust/just/cargo.just` imported and `just` installed |
 | `cargo-deps` | `deny`, `deny-checks`, `deny-args`, `machete`, `machete-args`, `working-directory` | cargo-deny (`licenses bans sources` by default) and cargo-machete (unused dependencies); Linux runners only; your repo supplies `deny.toml` |
+| `cargo-crap` | `working-directory`, `args`, `coverage-args`, `lcov`, `baseline`, `base`, `fail-regression`, `fail-above`, `comment`, `comment-marker`, `github-token` | runs `minikin/cargo-crap` (via `cargo llvm-cov` unless `lcov` is given), compares PRs against their base commit, posts/updates a PR comment (needs `pull-requests: write`), and gates on regressions (`fail-regression: "true"`) or threshold (`fail-above: "false"`); outputs `crappy`, `regressed`, `report` |
 | `cargo-check` | `working-directory`, `fmt`, `clippy`, `clippy-args`, `test`, `args` | `cargo fmt --check`, clippy, test (`args` goes to clippy and test, not fmt) |
 | `check-version` | `manifest-path`, `packages`, `tag`, `require-tag` | verifies workspace crates in `Cargo.toml` agree on one version, checks an optional tag matches `v<version>`, and outputs `version` and `tag` |
 | `build-docs` | `working-directory`, `doxyfile`, `html-dir`, `publish` | Doxygen + Graphviz, build, optional Pages deploy |
@@ -306,6 +307,34 @@ jobs:
 | `working-directory` | `.` | directory containing `Cargo.toml` |
 | `deny-args` | `--all-features` | arguments passed to `cargo-deny` before `check` |
 | `lfs` | `false` | fetch Git LFS files when checking out |
+
+To score Rust functions by CRAP (complexity × untested code) on pushes and pull requests, call the
+reusable `rust-crap.yml` workflow. On pull requests it scores the base commit, posts or updates a PR
+comment, and fails on regressions by default (project-specific settings can live in
+`.cargo-crap.toml`):
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  crap:
+    uses: ptsouchlos/infra/.github/workflows/rust-crap.yml@v1
+```
+
+| Input | Default | Does |
+| --- | --- | --- |
+| `os`, `toolchain` | `ubuntu-latest`, `stable` | runner label and Rust toolchain |
+| `working-directory` | `.` | directory containing `Cargo.toml` |
+| `args`, `coverage-args` | none | extra shell-word arguments for `cargo-crap` and `cargo llvm-cov` |
+| `baseline` | none | baseline JSON file, relative to `working-directory`, instead of scoring the base commit |
+| `fail-regression`, `fail-above` | `true`, `false` | fail when a function's score rises, or when any function exceeds the threshold |
+| `comment`, `comment-marker` | `true`, `<!-- cargo-crap-report -->` | post/update a PR comment and identify it across runs |
+| `lfs` | `false` | fetch Git LFS files when checking out |
+
+Add repo-specific steps, such as installing system libraries or reusing an existing `lcov.info`, by
+using `setup-rust` and `cargo-crap` in your own job instead.
 
 To build, package, manifest and publish a Rust release across platforms, call the reusable `rust-release.yml` workflow:
 

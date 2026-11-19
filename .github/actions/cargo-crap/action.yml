@@ -1,0 +1,64 @@
+name: Score Rust CRAP
+description: Compute CRAP (Change Risk Anti-Patterns) scores for Rust functions via cargo-crap, compare pull requests against their base commit, comment and gate.
+inputs:
+  working-directory:
+    description: Directory containing Cargo.toml.
+    default: "."
+  args:
+    description: Extra arguments for every cargo-crap run, as shell words (e.g. --threshold 25).
+    default: ""
+  coverage-args:
+    description: Extra arguments for cargo llvm-cov, as shell words (e.g. --workspace --all-features).
+    default: ""
+  lcov:
+    description: Existing LCOV file, relative to working-directory, used instead of running cargo llvm-cov.
+    default: ""
+  baseline:
+    description: Baseline JSON file, relative to working-directory, used instead of the base-commit run.
+    default: ""
+  base:
+    description: Commit to compare with (pull request base commit by default; ignored when baseline is given).
+    default: ${{ github.event.pull_request.base.sha }}
+  fail-regression:
+    description: Fail when a function's CRAP score rises relative to base or baseline.
+    default: "true"
+  fail-above:
+    description: Fail when any function scores above the threshold.
+    default: "false"
+  comment:
+    description: On a pull request, post or update the markdown report comment (needs pull-requests write permission).
+    default: "true"
+  comment-marker:
+    description: Hidden marker line used to find and update the existing PR comment.
+    default: "<!-- cargo-crap-report -->"
+  github-token:
+    description: Token used to post or update the pull request comment.
+    default: ${{ github.token }}
+outputs:
+  crappy:
+    description: Number of functions scoring above the threshold.
+    value: ${{ steps.crap.outputs.crappy }}
+  regressed:
+    description: On a pull request, number of functions whose CRAP score rose.
+    value: ${{ steps.crap.outputs.regressed }}
+  report:
+    description: Path to the generated markdown report.
+    value: ${{ steps.crap.outputs.report }}
+runs:
+  using: composite
+  steps:
+    - name: Run cargo-crap
+      id: crap
+      uses: minikin/cargo-crap@v0.9.0
+      with:
+        working-directory: ${{ inputs.working-directory }}
+        args: ${{ inputs.args }}
+        coverage-args: ${{ inputs.coverage-args }}
+        lcov: ${{ inputs.lcov }}
+        baseline: ${{ inputs.baseline }}
+        base: ${{ inputs.base }}
+        fail-regression: ${{ inputs.fail-regression }}
+        fail-above: ${{ inputs.fail-above }}
+        comment: ${{ inputs.comment }}
+        comment-marker: ${{ inputs.comment-marker }}
+        github-token: ${{ inputs.github-token }}
