@@ -5,7 +5,9 @@ inputs:
     description: "Compiler: gcc or clang (Linux), appleclang (macOS), msvc or clang (Windows)."
     required: true
   version:
-    description: Compiler major version on Linux (for example 14). Empty uses the distro default.
+    description: >-
+      Compiler major version on Linux (for example 14); exact LLVM version for clang on Windows
+      (for example 22.1.8), installed with Chocolatey. Empty uses the runner's default.
     default: ""
   cmake-version:
     description: Exact CMake version to install with pip. Empty keeps the runner's CMake.

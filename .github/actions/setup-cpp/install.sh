@@ -61,7 +61,18 @@ case "$RUNNER_OS:$COMPILER" in
         # The action's ilammy/msvc-dev-cmd step sets up the environment.
         ;;
     Windows:clang)
-        # LLVM ships on the runner and targets the MSVC runtime, which the msvc-dev-cmd step provides.
+        # LLVM targets the MSVC runtime, which the msvc-dev-cmd step provides. Without a version the
+        # runner's preinstalled LLVM is used; that can lag the image's MSVC STL, which rejects older
+        # Clangs (STL1000). Chocolatey needs an exact version, and installs into the
+        # C:\Program Files\LLVM directory already on PATH. upgrade --allow-downgrade moves an
+        # existing install to that version in either direction, or installs it fresh.
+        if [ -n "$VERSION" ]; then
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                echo "::error::Windows clang needs an exact LLVM version for Chocolatey (for example 22.1.8), got '$VERSION'"
+                exit 1
+            fi
+            run choco upgrade llvm --version "$VERSION" --allow-downgrade -y --no-progress
+        fi
         {
             echo "CC=clang"
             echo "CXX=clang++"
