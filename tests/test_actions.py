@@ -125,6 +125,23 @@ class SetupCppScript(unittest.TestCase):
         self.assertNotIn("apt-get", result.stdout)
         self.assertIn("CC=clang\n", gh_env)
         self.assertIn("CXX=clang++\n", gh_env)
+        self.assertNotIn("choco", result.stdout)
+
+    def test_windows_clang_with_version_pins_llvm_with_chocolatey(self):
+        result, gh_env = self.run_install(RUNNER_OS="Windows", COMPILER="clang",
+                                          VERSION="22.1.8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("choco upgrade llvm --version 22.1.8 --allow-downgrade",
+                      result.stdout)
+        self.assertIn("CC=clang\n", gh_env)
+        self.assertIn("CXX=clang++\n", gh_env)
+
+    def test_windows_clang_rejects_a_major_only_version(self):
+        result, gh_env = self.run_install(RUNNER_OS="Windows", COMPILER="clang",
+                                          VERSION="22")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exact LLVM version", result.stdout + result.stderr)
+        self.assertNotIn("choco upgrade", result.stdout)
 
     def test_unsupported_pair_fails_before_installing(self):
         result, gh_env = self.run_install(RUNNER_OS="macOS", COMPILER="gcc")
