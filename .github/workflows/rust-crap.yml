@@ -75,7 +75,7 @@ jobs:
         with:
           toolchain: ${{ inputs.toolchain }}
           components: llvm-tools-preview
-      - uses: minikin/cargo-crap@v0.9.0
+      - uses: minikin/cargo-crap@v1
         with:
           working-directory: ${{ inputs.working-directory }}
           args: ${{ inputs.args }}
