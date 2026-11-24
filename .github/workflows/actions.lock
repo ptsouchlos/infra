@@ -15,7 +15,7 @@ workflows:
         - 'extractions/setup-just@v4.0.0'
         - 'hendrikmuhs/ccache-action@v1.2.25'
         - 'ilammy/msvc-dev-cmd@v1.13.0'
-        - 'minikin/cargo-crap@v0.9.0'
+        - 'minikin/cargo-crap@v1'
         - 'softprops/action-gh-release@v3.0.4'
         - 'swatinem/rust-cache@v2.9.3'
         - 'taiki-e/install-action@v2'
@@ -141,14 +141,6 @@ dependencies:
         commit: 'sha1-0b201ec74fa43914dc39ae48a89fd1d8cb592756'
         owner_id: 1256587
         repo_id: 212181767
-    'minikin/cargo-crap@v0.9.0':
-        ref: 'v0.9.0'
-        commit: 'sha1-49f67037505997092f3df41d7a88e4fbfa09daee'
-        owner_id: 4456735
-        repo_id: 1216744997
-        uses:
-            - 'actions/github-script@v8'
-            - 'taiki-e/install-action@v2'
     'minikin/cargo-crap@v1':
         ref: 'v1'
         commit: 'sha1-49f67037505997092f3df41d7a88e4fbfa09daee'
