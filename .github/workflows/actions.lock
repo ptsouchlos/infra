@@ -11,7 +11,7 @@ workflows:
         - 'actions/setup-python@v7.1.0'
         - 'actions/upload-pages-artifact@v5.0.0'
         - 'bnjbvr/cargo-machete@v0.9.2'
-        - 'embarkstudios/cargo-deny-action@v2.1.1'
+        - 'embarkstudios/cargo-deny-action@v2.1.3'
         - 'extractions/setup-just@v4.0.0'
         - 'hendrikmuhs/ccache-action@v1.2.25'
         - 'ilammy/msvc-dev-cmd@v1.13.0'
@@ -112,6 +112,11 @@ dependencies:
     'embarkstudios/cargo-deny-action@v2.1.1':
         ref: 'v2.1.1'
         commit: 'sha1-3c6349835b2b7b196a839186cb8b78e02f7b5f25'
+        owner_id: 44887257
+        repo_id: 228054692
+    'embarkstudios/cargo-deny-action@v2.1.3':
+        ref: 'v2.1.3'
+        commit: 'sha1-17aeb3c839e42274e2b8adf721c8c65edfdc74dd'
         owner_id: 44887257
         repo_id: 228054692
     'extractions/setup-crate@0551596312d4008a6dfbc4d3c38fa20eaef46d2d':
