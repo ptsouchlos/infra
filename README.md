@@ -387,13 +387,16 @@ concurrency: infra-update
 jobs:
   update:
     uses: ptsouchlos/infra/.github/workflows/update-infra.yml@v1
-    secrets: inherit
+    secrets:
+      INFRA_BOT_PRIVATE_KEY: ${{ secrets.INFRA_BOT_PRIVATE_KEY }}
     with:
       tag: ${{ github.event.client_payload.tag }}
 ```
 
-It mints a GitHub App token (not `GITHUB_TOKEN`, whose PRs do not trigger CI). To use the
-`update-infra` action directly instead, pass it a token from `actions/create-github-app-token`.
+It mints a GitHub App token (not `GITHUB_TOKEN`, whose PRs do not trigger CI). Pass the key by
+name: `secrets: inherit` only reaches a reusable workflow under the same owner, so it fails for a
+consumer in another account or organization. To use the `update-infra` action directly instead,
+pass it a token from `actions/create-github-app-token`.
 
 Per consumer repo, install the App on it and run:
 
@@ -402,6 +405,16 @@ gh repo edit R --add-topic uses-infra
 gh variable set INFRA_BOT_APP_ID -R R
 gh secret set INFRA_BOT_PRIVATE_KEY -R R < key.pem
 ```
+
+A release notifies consumers one installation at a time. For consumers outside this repo's owner,
+install the App on their account or organization too, and list every owner in infra's
+`INFRA_BOT_OWNERS` variable as a JSON array:
+
+```sh
+gh variable set INFRA_BOT_OWNERS -R ptsouchlos/infra --body '["ptsouchlos", "other-org"]'
+```
+
+Unset, it notifies this repo's owner only.
 
 A drifted vendored file makes the step fail instead of being overwritten; fix it by hand.
 
