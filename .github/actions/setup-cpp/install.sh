@@ -66,12 +66,30 @@ case "$RUNNER_OS:$COMPILER" in
         # Clangs (STL1000). Chocolatey needs an exact version, and installs into the
         # C:\Program Files\LLVM directory already on PATH. upgrade --allow-downgrade moves an
         # existing install to that version in either direction, or installs it fresh.
+        # choco exits 0 when its feed is unreachable ("upgraded 0/1"), which would leave the old
+        # LLVM in place, so retry and check the clang on PATH reports the requested version.
         if [ -n "$VERSION" ]; then
             if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
                 echo "::error::Windows clang needs an exact LLVM version for Chocolatey (for example 22.1.8), got '$VERSION'"
                 exit 1
             fi
-            run choco upgrade llvm --version "$VERSION" --allow-downgrade -y --no-progress
+            attempts=3
+            for attempt in $(seq 1 "$attempts"); do
+                run choco upgrade llvm --version "$VERSION" --allow-downgrade -y --no-progress || true
+                if [ "$DRY_RUN" = 1 ]; then
+                    break
+                fi
+                installed="$(clang --version 2>/dev/null | head -n 1 || true)"
+                if [[ "$installed" == *"clang version $VERSION"* ]]; then
+                    break
+                fi
+                if [ "$attempt" = "$attempts" ]; then
+                    echo "::error::LLVM $VERSION did not install after $attempts attempts; clang on PATH reports '$installed'"
+                    exit 1
+                fi
+                echo "::warning::LLVM $VERSION not installed yet (clang reports '$installed'); retrying"
+                sleep "${RETRY_DELAY:-20}"
+            done
         fi
         {
             echo "CC=clang"

@@ -136,6 +136,39 @@ class SetupCppScript(unittest.TestCase):
         self.assertIn("CC=clang\n", gh_env)
         self.assertIn("CXX=clang++\n", gh_env)
 
+    def run_with_fake_llvm(self, clang_version):
+        # Stub choco (a no-op, like an unreachable feed) and clang on PATH, and run for real.
+        with tempfile.TemporaryDirectory() as d:
+            bin_dir = Path(d)
+            log = bin_dir / "choco.log"
+            stubs = {
+                "choco": f'echo "$*" >>"{log.as_posix()}"\n',
+                "clang": f'echo "clang version {clang_version}"\n',
+            }
+            for name, body in stubs.items():
+                stub = bin_dir / name
+                stub.write_text("#!/usr/bin/env bash\n" + body, encoding="utf-8")
+                stub.chmod(0o755)
+            result, gh_env = self.run_install(
+                RUNNER_OS="Windows", COMPILER="clang", VERSION="22.1.8",
+                DRY_RUN="0", RETRY_DELAY="0",
+                PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+            calls = log.read_text(encoding="utf-8").splitlines()
+            return result, gh_env, calls
+
+    def test_windows_clang_accepts_the_requested_llvm(self):
+        result, gh_env, calls = self.run_with_fake_llvm("22.1.8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("CXX=clang++\n", gh_env)
+
+    def test_windows_clang_fails_when_llvm_stays_at_the_old_version(self):
+        result, gh_env, calls = self.run_with_fake_llvm("20.1.8")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(calls), 3)
+        self.assertIn("LLVM 22.1.8 did not install", result.stdout + result.stderr)
+        self.assertEqual(gh_env, "")
+
     def test_windows_clang_rejects_a_major_only_version(self):
         result, gh_env = self.run_install(RUNNER_OS="Windows", COMPILER="clang",
                                           VERSION="22")
